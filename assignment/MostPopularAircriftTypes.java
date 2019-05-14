@@ -7,6 +7,8 @@ import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.log4j.BasicConfigurator;
 
+import java.util.Collections;
+import java.util.HashMap;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -24,90 +26,157 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 public class MostPopularAircriftTypes {
 	
 	public static void main(String[] args) throws Exception {
-			  
-			BasicConfigurator.configure();
+
+		BasicConfigurator.configure();
+		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+		/****************************
+		*** READ IN DATA NEEDED. ***
+		****************************/
+
+		// Don't forget to change file path!
+
+		final String PATH = "/Users/charleshyland/Desktop/DATA3404/assignment_data_files/";
+		String outputFilePath = params.get("output", PATH + "most_popular_result_tiny.csv.txt");
+
+		
+		DataSet<Tuple2<String, String>> flights =
+		env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
+						.includeFields("010000100000")
+						.ignoreFirstLine()
+						.ignoreInvalidLines()
+						.types(String.class, String.class);
+
+		DataSet<Tuple3<String, String, String>> airlines =
+		env.readCsvFile(PATH + "ontimeperformance_airlines.csv")
+						.includeFields("111")
+						.ignoreFirstLine()
+						.ignoreInvalidLines()
+						.types(String.class, String.class, String.class);
+
+		DataSet<Tuple3<String, String, String>> aircrafts =
+		env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
+						.includeFields("101010000")
+						.ignoreFirstLine()
+						.ignoreInvalidLines()
+						.types(String.class, String.class, String.class);
+
+		/****************************
+		*** ACTUAL IMPLEMENTATION ***
+		****************************/						
+
+		/****************************
+		*	Implementation
+		*	1) flights join aircrafts join airlines
+		* 2) Apply filter for United States
+		* 3) Rank grouped by aircraft types
+		****************************/
 			
-			String  = args[0];  // command argument, in this code, I use United States temporarily
-			 
-			// get output file command line parameter - or use "top_rated_users.txt" as default
-		    final ParameterTool params = ParameterTool.fromArgs(args);
-		    String output_filepath = params.get("output", "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/results/most_popular.txt");
+		// Step 1
+		DataSet<Tuple2<String, String>> flightsOnAircrafts =
+			flights.join(aircrafts)
+			.where(1)
+			.equalTo(0)
+			.with(new EquiJoinAirlinesCountry());
 
-		    
-		    // obtain handle to execution environment
-		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		    
-		    DataSet<Tuple2<String, String>> flights =
-				      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_flights_tiny.csv")
-				      .includeFields("0100001") // the second column is airlines code, 7-th col is tail_number
-				      .ignoreFirstLine() // csv has header
-				      .ignoreInvalidLines() // need it
-				      .types(String.class,String.class); // these two columns are integer type
-		    
-		     // load the second dataset
-			    DataSet<Tuple3<String,String, String>> models =
-			      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_aircrafts.csv")
-			      .includeFields("10101") // 1-th tailernumber, 3 is manufacturer, 5-th is model
-			      .ignoreFirstLine() // csv has header
-			      .ignoreInvalidLines() // need it
-			      .types(String.class, String.class, String.class); 
-			       
-		    // load the third dataset
-		    DataSet<Tuple3<String, String, String>> airlines =
-				      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_airlines.csv")
-				      .includeFields("111") 
-				      .ignoreFirstLine() // csv has header
-				      .ignoreInvalidLines() // need it
-				      .types(String.class,String.class,String.class); // these two columns are integer type
-		    
-		    
-		    // Filter dataset for\ specific airline
-		    DataSet<Tuple3<String, String, String>> airlinesCountry =
-		    		airlines.filter(new FilterFunction<Tuple3<String, String, String>() {
-		                            public boolean filter(Tuple3<String, String, String> entry) { return entry.f2.equals("United States"); } 
-		            }); 
-            
-		    // keep smaller relation as outer
-		    DataSet<Tuple2<String, String >> FlightCountry = airlinesCountry
-				      .join(flights)
-				      .where(0) // key of the first relation (tuple field 0)           
-				      .equalTo(1) // key of the second relation (tuple field 0)
-				      .projectFirst(1) // name of airline
-				      .projectSecond(1); // tail_number
-		    
-		    
-			 // Equal Join (JoinHint.BROADCAST_HASH_FIRST maybe )
-			 // join the two datasets
-			 // keep smaller relation as outer(if local join)
-		    DataSet<Tuple3<String, String, String>> joinresult = models
-			      .join(airlinesCountry)
-			      .where(0) // tailernumber of outer          
-			      .equalTo(1) 
-			      .projectFirst(1,2)  // manufacturer and model 
-			      .projectSecond(1); // airline name 
-			      //.groupBy(1,2);
+		DataSet<Tuple3<String, String, String>> completeData =
+			flightsOnAircrafts.join(airlines).where(0).equalTo(0)
+			.with(new EquiJoinFlightAircraftWithAirlines());
 
-		    
-		    
-		    
-		    
-		    /*
-		    //write out final result
-		    finalresult.writeAsText(output_filepath, WriteMode.OVERWRITE);
-		    		
-		    		
-		    
-		    // execute the FLink job
-		    env.execute("Executing task 1 program");
-		    // alternatively: get execution plan
-		    
-		    //System.out.println(env.getExecutionPlan());
 
-		    // wait 20secs at end to give us time to inspect ApplicationMAster's WebGUI
-		    //Thread.sleep(20000); 
-		     * 
-		     */
-		    
+		// Step 2
+		DataSet<Tuple2<String, String>> finalResult = 
+			completeData.filter(new FilterFunction<Tuple3<String, String, String>>() {
+			@Override
+			public boolean filter(Tuple3<String, String, String> tuple) {
+				// Filter for United States
+				return tuple.f2.contains("United States"); }
+			})
+			.project(0, 1);
+
+
+		// Step 3
+			finalResult.reduceGroup(new Rank()).groupBy(0)
+				.sortGroup(2, Order.DESCENDING)
+				.first(5)
+				.groupBy(0)
+				.sortGroup(2, Order.DESCENDING)
+				.reduceGroup(new Concat())
+				.sortPartition(0, Order.ASCENDING);
+
+				finalResult.writeAsText(outputFilePath, WriteMode.OVERWRITE);
 		}
 
+
+	 /**
+		* Equi-join flights and aircrafts csv.
+		* View step 1
+	  */
+	private static class EquiJoinAirlinesCountry implements JoinFunction <Tuple2<String, String>, Tuple3<String, String, String>, Tuple2<String, String>> {
+		@Override
+		public Tuple2<String, String> join(Tuple2<String, String> flightsData, Tuple3<String, String, String> aircraftsData){
+			return new Tuple2<>(flightsData.f0, aircraftsData.f1 + " " + aircraftsData.f2);
+		}
+	}
+
+ /**
+	* Equi-join flights/aircrafts with airlines csv.
+	* View step 1
+	*/
+	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
+		@Override
+		public Tuple3<String, String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple3<String, String, String> airlinesData){
+			return new Tuple3<>(airlinesData.f1, flightsOnAircraftsData.f1, airlinesData.f2);
+		}
+	}
+
+	/**
+	* Rank the groupings
+	* View step 3
+	*/
+	private static class Rank implements GroupReduceFunction<Tuple2<String, String>, Tuple3<String, String, Integer>> {
+		@Override
+		public void reduce(Iterable<Tuple2<String, String>> combinedData, Collector<Tuple3<String, String, Integer>> result) {
+			HashMap<String, Integer> counter = new HashMap<String, Integer>(); // To help us construct data at the end.
+			String airline, aircraft = airline = null;
+
+			// Count how often entry appears.
+			for(Tuple2<String, String> entry: combinedData) {
+				String line = entry.f0 + "%" + entry.f1;
+				int count = counter.containsKey(line) ? counter.get(line) : 0;
+				counter.put(line, count + 1);
+			}
+			// Collect result of count.
+			for(String key : tracker.keySet()){
+				int count = counter.get(key);
+				String [] tuple = ans.split("%"); // To help us store information.
+				result.collect(new Tuple3 <> (tuple[0], tuple[1], count));
+			}
+		}
+	}
+
+ /**
+	* Constructs and concatenates filtered result for final output.
+	* View step 3
+	*/
+	private static class Concat implements GroupReduceFunction<Tuple3<String, String, Integer>, Tuple2 <String, String>> {
+		@Override
+		public void reduce(Iterable<Tuple3<String, String, Integer>> object, Collector<Tuple2<String, String>> output) throws Exception {
+			String head, line = head = null;;
+			for(Tuple3<String, String, Integer> count : object){
+				if(head == null){
+					head = count.f0;
+					line = "[";
+			}
+				if(count.f0.equals(head)){
+					if(line.length() != 1){
+						line += ", ";
+					}
+					line += count.f1;
+				}
+			}
+			line += "]";
+			output.collect(new Tuple2<>(head, line));
+		}
+	}
 }

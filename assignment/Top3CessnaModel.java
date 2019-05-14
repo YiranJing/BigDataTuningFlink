@@ -21,14 +21,14 @@ public class Top3CessnaModel {
 			
 		    // get output file command line parameter - or use "top_rated_users.txt" as default
 		    final ParameterTool params = ParameterTool.fromArgs(args);
-		    String output_filepath = params.get("output", "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/results/top_3_cessna.txt");
+		    String output_filepath = params.get("output", "/Users/yiranjing/Desktop/top_3_cessna.txt");
 		    
 		    // obtain handle to execution environment
 		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
 		    // load the first dataset
 		    DataSet<Tuple3<String,String, String>> models =
-		      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_aircrafts.csv")
+		      env.readCsvFile("/Users/charleshyland/Dropbox/University-work/5th year/Semester 1/DATA3404/Assignment/assignment_data_files/ontimeperformance_aircrafts.csv")
 		      .includeFields("10101") // the first column is join key, the third column is manufacturer, the fifth column is model
 		      .ignoreFirstLine() // csv has header
 		      .ignoreInvalidLines() // need it
@@ -47,7 +47,7 @@ public class Top3CessnaModel {
 		    	    
 		 // load the second dataset
 		    DataSet<Tuple1<String>> flights =
-		      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_flights_tiny.csv")
+		      env.readCsvFile("/Users/charleshyland/Dropbox/University-work/5th year/Semester 1/DATA3404/Assignment/assignment_data_files/ontimeperformance_flights_tiny.csv")
 		      .includeFields("0000001") // only need the 7-th column (join key)
 		      .ignoreFirstLine() // csv has header
 		      .ignoreInvalidLines() // need it
