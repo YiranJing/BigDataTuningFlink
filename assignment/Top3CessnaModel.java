@@ -19,81 +19,80 @@ public class Top3CessnaModel {
 		  
 			BasicConfigurator.configure();
 			
-		    // get output file command line parameter - or use "top_rated_users.txt" as default
-		    final ParameterTool params = ParameterTool.fromArgs(args);
-		    String output_filepath = params.get("output", "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/results/top_3_cessna.txt");
-		    
-		    // obtain handle to execution environment
+			/****************************
+			*** READ IN DATA NEEDED. ***
+			****************************/
+			
+			
+			final String PATH = "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/";
+			final ParameterTool params = ParameterTool.fromArgs(args);
+			String outputFilePath = params.get("output", PATH + "results/top_3_cessna.txt");
+    
 		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-		    // load the first dataset
 		    DataSet<Tuple3<String,String, String>> models =
-		      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_aircrafts.csv")
-		      .includeFields("10101") // the first column is join key, the third column is manufacturer, the fifth column is model
-		      .ignoreFirstLine() // csv has header
-		      .ignoreInvalidLines() // need it
+		      env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
+		      .includeFields("10101") 
+		      .ignoreFirstLine() 
+		      .ignoreInvalidLines() 
 		      .types(String.class, String.class,String.class); 
 		    
+		    DataSet<Tuple1<String>> flights =
+				      env.readCsvFile(PATH+"ontimeperformance_flights_tiny.csv")
+				      .includeFields("0000001") 
+				      .ignoreFirstLine() 
+				      .ignoreInvalidLines() 
+				      .types(String.class); 
 		    
-		    // data transformation
-		    // do filter before  join
-		    // filter for the specific manufacturer Cessna;
+		
+		    /****************************
+			*** ACTUAL IMPLEMENTATION ***
+			****************************/						
+
+			/****************************
+			*	Implementation
+			*
+			* 1) Filter CESSNA Model
+			* 2) Join the filtered data sets 
+			* 3) Group by each model and count how many flights per model, and pick top 3 only after sort 
+			****************************/
+		    
+		    
+		    
+	    // Step 1
 		    DataSet<Tuple2<String, String>> modelsCessna =
 		    		models.filter(new FilterFunction<Tuple3<String,String,String>>() {
 		                            public boolean filter(Tuple3<String, String, String> entry) { return entry.f1.equals("CESSNA"); } // f1 is second field.
-		            }).project(0,2);  // keep only two columns: tail_number and  model. (they all belong to Cessna)
+		            }).project(0,2);  
 		    
-		   
-		    	    
-		 // load the second dataset
-		    DataSet<Tuple1<String>> flights =
-		      env.readCsvFile("/Users/yiranjing/Desktop/DATA3404/assignment_data_files/ontimeperformance_flights_tiny.csv")
-		      .includeFields("0000001") // only need the 7-th column (join key)
-		      .ignoreFirstLine() // csv has header
-		      .ignoreInvalidLines() // need it
-		      .types(String.class); // these two columns are integer type
-		   
-		
-		 
-		 // Equal Join (JoinHint.BROADCAST_HASH_FIRST maybe )
-		 // join the two datasets
-		 // keep smaller relation as outer(if local join)
+	    // Step 2 
 		    DataSet<Tuple1<String>> joinresult =
-		      modelsCessna
-		      .join(flights)
-		      .where(0) // key of the first relation (tuple field 0)           
-		      .equalTo(0) // key of the second relation (tuple field 1)
-		      .projectFirst(1);   // keep only model number
-		 
-		 
+		      modelsCessna.join(flights).where(0).equalTo(0).projectFirst(1);   
 		    
-		// group by flight_id and count how many per model;
+	    // Step 3
 		    joinresult.flatMap(new CountFlightPerModel())
-		      .groupBy(0) //group according to model
+		      .groupBy(0) 
 		      .sum(1)          
 		      .sortPartition(1, Order.DESCENDING) // number of flights in decreasing order
 		      .first(3) // pick only top 3
-		      .writeAsText(output_filepath, WriteMode.OVERWRITE);
-		    
-		    
+		      .writeAsText(outputFilePath, WriteMode.OVERWRITE);
+		   
 
 		    // execute the FLink job
 		    env.execute("Executing task 1 program");
-		    // alternatively: get execution plan
-		    
-		    //System.out.println(env.getExecutionPlan());
-
-		    // wait 20secs at end to give us time to inspect ApplicationMAster's WebGUI
+		   
 		   // Thread.sleep(20000);
 		  }
 	  
-	 
+	/**
+	* Count how many flights per model
+	* View step 3
+	*/
 	  private static class CountFlightPerModel implements FlatMapFunction<Tuple1<String>, Tuple2<String,Integer>> {
 	    @Override
 	    public void flatMap( Tuple1<String> input_tuple, Collector<Tuple2<String,Integer>> out) {
-	    	input_tuple.f0 = input_tuple.f0.replaceAll("[^0-9]+", " ").trim();// delete non-digits
+	    	input_tuple.f0 = input_tuple.f0.replaceAll("[^0-9]+", " ").trim().substring(0,3); // delete non-digits and then keep only first 3 digits
 	    	input_tuple.f0 ="Cessna "+input_tuple.f0;
-	    	//System.out.println(input_tuple.f0);
 	    	out.collect(new Tuple2<String,Integer>(input_tuple.f0,1));
 	    }
 	  }
