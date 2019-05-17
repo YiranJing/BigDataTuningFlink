@@ -3,6 +3,7 @@ package assignment;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase.JoinHint;
 import org.apache.flink.util.Collector;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
@@ -38,9 +39,8 @@ public class Top3CessnaModel {
 		      .types(String.class, String.class,String.class); 
 		    
 		    DataSet<Tuple1<String>> flights =
-				      env.readCsvFile(PATH+"ontimeperformance_flights_tiny.csv")
+				      env.readCsvFile(PATH+"ontimeperformance_flights_medium.csv")
 				      .includeFields("0000001") 
-				      .ignoreFirstLine() 
 				      .ignoreInvalidLines() 
 				      .types(String.class); 
 		    
@@ -67,8 +67,8 @@ public class Top3CessnaModel {
 		    
 	    // Step 2 
 		    DataSet<Tuple1<String>> joinresult =
-		      modelsCessna.join(flights).where(0).equalTo(0).projectFirst(1);   
-		    
+		      modelsCessna.join(flights, JoinHint.BROADCAST_HASH_FIRST).where(0).equalTo(0).projectFirst(1);   
+		    	//modelsCessna.join(flights).where(0).equalTo(0).projectFirst(1);   
 	    // Step 3
 		    joinresult.flatMap(new CountFlightPerModel())
 		      .groupBy(0) 
@@ -81,7 +81,9 @@ public class Top3CessnaModel {
 		    // execute the FLink job
 		    env.execute("Executing task 1 program");
 		   
-		   // Thread.sleep(20000);
+		   // option 2
+		   //System.out.println(env.getExecutionPlan());
+		   //Thread.sleep(40000000);
 		  }
 	  
 	/**
