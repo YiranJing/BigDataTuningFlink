@@ -124,15 +124,15 @@ public class AverageDepartureDelay {
 	                     }).flatMap(new TimeDifferenceMapper());
     
 	 //Step 2)    
-	    DataSet<Tuple2<String, String>> surtedUSairlines = USairlines.sortPartition(1,Order.ASCENDING);
+	    DataSet<Tuple2<String, String>> surtedUSairlines = USairlines.sortPartition(1,Order.ASCENDING);  //  1 is airline name
 		
 	    
 	// Step 3	
 		DataSet<Tuple2<String, Long>> flightsCraftes = aircraftsYear
-			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  		
+			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
 		    
 	    DataSet<Tuple2<String,Long>> joinresult = USairlines
-		      .join(flightsCraftes).where(0).equalTo(0).projectFirst(1).projectSecond(1); 
+		      .join(flightsCraftes).where(0).equalTo(0).projectFirst(1).projectSecond(1); // airline name, number of delay
 	    
 	    
 	    
@@ -176,7 +176,7 @@ public class AverageDepartureDelay {
 	     SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
 	          @Override
 	          public void flatMap(Tuple4<String, String, String, String>input_tuple, Collector<Tuple3<String,String,Long>> out) throws ParseException { 
-	        	  Long diff_min =(format.parse(input_tuple.f3).getTime()-format.parse(input_tuple.f2).getTime())/(60 * 1000) % 60;
+	        	  Long diff_min =(long) ((format.parse(input_tuple.f3).getTime()-format.parse(input_tuple.f2).getTime())/(60.0 * 1000.0) % 60.0);
 	        	  out.collect(new Tuple3<String,String,Long>(input_tuple.f0, input_tuple.f1, diff_min)); 
 		    }
 		  }

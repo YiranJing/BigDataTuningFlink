@@ -79,10 +79,10 @@ public class Top3CessnaModel {
 		   
 
 		    // execute the FLink job
-		    env.execute("Executing task 1 program");
+		   // env.execute("Executing task 1 program");
 		   
 		   // option 2
-		   //System.out.println(env.getExecutionPlan());
+		   System.out.println(env.getExecutionPlan());
 		   //Thread.sleep(40000000);
 		  }
 	  
