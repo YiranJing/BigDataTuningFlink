@@ -5,6 +5,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase.JoinHint;
 import org.apache.flink.util.Collector;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
@@ -130,10 +131,10 @@ public class AverageDepartureDelay {
 	    
 	// Step 3	
 		DataSet<Tuple2<String, Long>> flightsCraftes = aircrafts
-			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
+			  .join(flightsDelay,JoinHint.BROADCAST_HASH_FIRST).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
 		    
 	    DataSet<Tuple2<String,Long>> joinresult = sortedUSairlines
-		      .join(flightsCraftes).where(0).equalTo(0).projectFirst(1).projectSecond(1); // airline name, number of delay
+		      .join(flightsCraftes,JoinHint.BROADCAST_HASH_FIRST).where(0).equalTo(0).projectFirst(1).projectSecond(1); // airline name, number of delay
 	    
 	    
 	    
@@ -167,27 +168,8 @@ public class AverageDepartureDelay {
 	        	  }
 		    }
 		  }
-	/**
-	* Count the number of delay flights for each airline
-	* View step 3
-	*/	   
-	  private static class NumMapper implements FlatMapFunction<Tuple2<String,Long>, Tuple2<String,Integer>> {
-		    @Override
-		    public void flatMap( Tuple2<String,Long> input_tuple, Collector<Tuple2<String,Integer>> out) {
-		      out.collect(new Tuple2<String,Integer>(input_tuple.f0,1));
-		    }
-		  }
-	/**
-	* Calculate average delay time based on the count
-	* View step 3
-	*/
-	  private static class AvgMapper implements FlatMapFunction<Tuple5<String,Integer,Long,Long,Long>, Tuple5<String,Integer,Long,Long,Long>> {
-		    @Override
-		    public void flatMap(Tuple5<String,Integer,Long,Long,Long> input_tuple, Collector<Tuple5<String,Integer,Long,Long,Long>> out) {
-		    	Long avg = input_tuple.f2/input_tuple.f1;
-		      out.collect(new Tuple5<String,Integer,Long,Long,Long>(input_tuple.f0,input_tuple.f1,avg,input_tuple.f3,input_tuple.f4));
-		    }
-		  }
+	 
+	 
 	  /**
 		* Calculate the number of delay, average, min, max of each airline
 		* View step 3

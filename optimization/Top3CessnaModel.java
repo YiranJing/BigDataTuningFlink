@@ -27,7 +27,7 @@ public class Top3CessnaModel {
 			
 			final String PATH = "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/";
 			final ParameterTool params = ParameterTool.fromArgs(args);
-			String outputFilePath = params.get("output", PATH + "results/optimization_top_3_cessna_tiny.txt");
+			String outputFilePath = params.get("output", PATH + "results/optimization_top_3_cessna_medium.txt");
     
 		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
@@ -39,7 +39,7 @@ public class Top3CessnaModel {
 		      .types(String.class, String.class,String.class); 
 		    
 		    DataSet<Tuple1<String>> flights =
-				      env.readCsvFile(PATH+"ontimeperformance_flights_tiny.csv")
+				      env.readCsvFile(PATH+"ontimeperformance_flights_medium.csv")
 				      .includeFields("0000001") 
 				      .ignoreInvalidLines() 
 				      .types(String.class); 
@@ -75,12 +75,12 @@ public class Top3CessnaModel {
 		      .sum(1)          
 		      .sortPartition(1, Order.DESCENDING) // number of flights in decreasing order
 		      .setParallelism(1)
-		      //.first(3) // pick only top 3
+		      .first(3) // pick only top 3
 		      .writeAsText(outputFilePath, WriteMode.OVERWRITE);
 		   
 
 		    // execute the FLink job
-		   env.execute("Executing task 1 program tiny");
+		   env.execute("Executing task 1 program medium");
 		   
 		   // option 2
 		   //System.out.println(env.getExecutionPlan());
