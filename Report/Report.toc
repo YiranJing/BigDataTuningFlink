@@ -1,0 +1,11 @@
+\babel@toc {english}{}
+\contentsline {section}{Aim}{2}{section*.1}
+\contentsline {section}{Data}{3}{section*.3}
+\contentsline {section}{Results and Discussion}{5}{section*.5}
+\contentsline {subsection}{Classifier Accuracy}{5}{section*.6}
+\contentsline {subsection}{Discussion}{5}{table.caption.10}
+\contentsline {subsection}{Further Analysis}{8}{section*.11}
+\contentsline {section}{Conclusion}{11}{section*.19}
+\contentsline {section}{Reflection}{12}{section*.21}
+\contentsline {section}{Appendix}{13}{section*.23}
+\contentsline {subsection}{Decision Trees}{13}{section*.24}
