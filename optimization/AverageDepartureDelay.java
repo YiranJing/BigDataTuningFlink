@@ -11,10 +11,13 @@ import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.log4j.BasicConfigurator;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Scanner;
 
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple1;
@@ -24,6 +27,9 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFields;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsFirst;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsSecond;
 
 
 public class AverageDepartureDelay {
@@ -46,6 +52,11 @@ public class AverageDepartureDelay {
 		// Used for time interval calculation
 		SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
 		 
+		// user specific input 
+		Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter a year:" );  
+		String year = scanner.nextLine();
+		scanner.close();
 	    
 	    // obtain handle to execution environment
 	    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -108,7 +119,7 @@ public class AverageDepartureDelay {
 	    		@Override
 				public boolean filter(Tuple5<String, String, String,String, String> tuple) {
 						// Filter for given year
-					return tuple.f1.substring(0,4).equals("1995"); } 
+					return tuple.f1.substring(0,4).equals(year); } 
 		        }).project(0,2,3,4); 
 	    
 	    
@@ -143,12 +154,23 @@ public class AverageDepartureDelay {
 	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = joinresult.groupBy(0).reduceGroup(new Aggregation())
 	    		.setParallelism(1);
 	    		
-	    
-   
+
 	    //write out final result
 	    finalresult.writeAsText(outputFilePath, WriteMode.OVERWRITE);   
+	    
+	    long startTime = System.currentTimeMillis();
+	    
         // execute the FLink job
-	   	env.execute("Executing task 2 program tiny");
+	    env.execute("Executing task 2 program tiny");
+	    
+	    
+	    long endTime = System.currentTimeMillis();
+	    long timeTaken = endTime-startTime;
+	    
+	    String timeFilePath = params.get("output", PATH + "results/optimize_Delay_time.txt");
+	    BufferedWriter out = new BufferedWriter(new FileWriter(timeFilePath));
+	    out.write("Time taken for execution was: " + timeTaken+"\n");
+	    out.close();
 	   
 	  
 	
@@ -158,14 +180,15 @@ public class AverageDepartureDelay {
 	* After get the delay time, filter out the scheduled and actual departure time columns
 	* View step 1 c)
 	*/
+	 @ForwardedFields("0;1") // Specify that the first and second element is copied without any changes
 	 private static class TimeDifferenceMapper implements FlatMapFunction<Tuple4<String, String, String, String>, Tuple3<String,String,Long>>{
 	     SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
 	          @Override
 	          public void flatMap(Tuple4<String, String, String, String>input_tuple, Collector<Tuple3<String,String,Long>> out) throws ParseException { 
 	        	  Long diff_min =(long) ((format.parse(input_tuple.f3).getTime()-format.parse(input_tuple.f2).getTime())/(60.0 * 1000.0) % 60.0);
-	        	  if (diff_min>0) {
+	        	 if (diff_min>0) {
 	        		  out.collect(new Tuple3<String,String,Long>(input_tuple.f0, input_tuple.f1, diff_min)); 
-	        	  }
+	        	 }
 		    }
 		  }
 	 

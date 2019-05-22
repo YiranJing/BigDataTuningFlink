@@ -1,5 +1,8 @@
 package optimization;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.operators.Order;
@@ -13,6 +16,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFields;
 
 
 public class Top3CessnaModel {
@@ -79,18 +83,27 @@ public class Top3CessnaModel {
 		      .writeAsText(outputFilePath, WriteMode.OVERWRITE);
 		   
 
+		   long startTime = System.currentTimeMillis();
+		    
+		    
 		    // execute the FLink job
 		   env.execute("Executing task 1 program medium");
 		   
-		   // option 2
-		   //System.out.println(env.getExecutionPlan());
+		   long endTime = System.currentTimeMillis();
+		   long timeTaken = endTime-startTime;
+		    
+		    String timeFilePath = params.get("output", PATH + "results/optimize_Top3Cessna_time.txt");
+		    BufferedWriter out = new BufferedWriter(new FileWriter(timeFilePath));
+		    out.write("Time taken for execution was: " + timeTaken+"\n");
+		    out.close();
 		  
-		  }
+		  }  
 	  
-	/**
+	  /**
 	* Count how many flights per model
 	* View step 3
 	*/
+	  @ForwardedFields("0") // // Specify that the first element is copied without any changes
 	  private static class CountFlightPerModel implements FlatMapFunction<Tuple1<String>, Tuple2<String,Integer>> {
 	    @Override
 	    public void flatMap( Tuple1<String> input_tuple, Collector<Tuple2<String,Integer>> out) {
