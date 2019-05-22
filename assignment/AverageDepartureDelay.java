@@ -9,6 +9,8 @@ import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.log4j.BasicConfigurator;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -21,6 +23,8 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import java.util.concurrent.TimeUnit;
+import java.util.Scanner;
 
 
 public class AverageDepartureDelay {
@@ -29,41 +33,47 @@ public class AverageDepartureDelay {
 		  
 		BasicConfigurator.configure();
 		
-		//String year = args[0];  // command argument, in this code, I use 2004 temporarily
-		
 		/****************************
 		*** READ IN DATA NEEDED. ***
 		****************************/
 
 		// Don't forget to change file path!
 		
-		final String PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/";
+		//final String PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/";
+		final String PATH = "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/";
+		//final String PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/";
 		final ParameterTool params = ParameterTool.fromArgs(args);
-		String outputFilePath = params.get("output", PATH + "/Users/yiranjing/Desktop/DATA3404/"
-				+ "assignment_data_files/results/bad_avg_dep_delay_tiny.txt");
+		//final String Out_PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/user/yjin5856/result/";
+		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/avg_dep_delay_tiny.txt");
+		String outputFilePath = params.get("output", PATH + "results/bad_avg_dep_delay_tiny.txt");
 		// Used for time interval calculation
 		SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
-		 
-	    
+		
+		// user specific input 
+		Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter a year:" );  
+		String year = scanner.nextLine();
+		scanner.close();
+		
 	    // obtain handle to execution environment
 	    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 	    
-	    DataSet<Tuple5<String, String, String,String,String>> flights =
-			      env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_flights_tiny.csv")
-			      .includeFields("0101001101")  // carrier_code, flight_date, tail_number, scheduled_depar, actual_departure
+	    DataSet<Tuple4<String, String,String,String>> flights =
+			      env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
+			      .includeFields("0100001101") 
 			      .ignoreFirstLine() 
 			      .ignoreInvalidLines() 
-			      .types(String.class,String.class,String.class, String.class,String.class); 
+			      .types(String.class,String.class,String.class,String.class); 
 	    
-	    DataSet<Tuple1<String>> aircrafts =
-	    		  env.readCsvFile(PATH +"share/data3404/assignment/ontimeperformance_aircrafts.csv")
-	    		  .includeFields("1") 
+	    DataSet<Tuple2<String,String>> aircrafts =
+	    		  env.readCsvFile(PATH +"ontimeperformance_aircrafts.csv")
+	    		  .includeFields("100000001") 
 		          .ignoreFirstLine() 
 		          .ignoreInvalidLines() 
-		          .types(String.class); 
+		          .types(String.class, String.class); 
 	    
 	    DataSet<Tuple3<String, String,String>> airlines =
-			      env.readCsvFile(PATH +"share/data3404/assignment/ontimeperformance_airlines.csv")
+			      env.readCsvFile(PATH +"ontimeperformance_airlines.csv")
 			      .includeFields("111") 
 			      .ignoreFirstLine() 
 			      .ignoreInvalidLines() 
@@ -89,7 +99,7 @@ public class AverageDepartureDelay {
 		* 5) Compute the average time
 		****************************/
 	    
-		// Step 1 a)
+	// Step 1 a)
 	    DataSet<Tuple2<String, String>> USairlines = 
 				airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
 				@Override
@@ -99,20 +109,18 @@ public class AverageDepartureDelay {
 				})
 				.project(0, 1);
 	    
+	    
+	    
+	// Step 1 b) 
+		DataSet<Tuple1<String>> aircraftsYear =
+		    		aircrafts.filter(new FilterFunction<Tuple2<String,String>>() {
+		                            public boolean filter(Tuple2<String, String> entry) { return entry.f1.equals(year); } 
+		            }).project(0); 
+	   
 		
-	 // Step 1 b)   
-	    DataSet<Tuple4<String, String, String,String>>flightsYear = 
-	    		flights.filter(new FilterFunction<Tuple5<String, String, String, String, String>>() {
-	    		@Override
-				public boolean filter(Tuple5<String, String, String,String, String> tuple) {
-						// Filter for given year
-					return tuple.f1.substring(0,4).equals("1995"); } 
-		        }).project(0,2,3,4); 
-	    
-	    
     // Step 1 c)
 	    DataSet<Tuple3<String,String,Long>>flightsDelay =
-	    		     flightsYear.filter(new FilterFunction<Tuple4<String, String, String, String>>() {
+	    		    flights.filter(new FilterFunction<Tuple4<String, String, String, String>>() {
 	                            public boolean filter(Tuple4<String, String,String,String> entry){
 	                            	try {
 	                            	return (format.parse(entry.f2).getTime() < format.parse(entry.f3).getTime());}  // filter only delayed flights
@@ -124,14 +132,14 @@ public class AverageDepartureDelay {
 	                     }).flatMap(new TimeDifferenceMapper());
     
 	 //Step 2)    
-	    DataSet<Tuple2<String, String>> sortedUSairlines = USairlines.sortPartition(1,Order.ASCENDING);  //  1 is airline name
+	    DataSet<Tuple2<String, String>> surtedUSairlines = USairlines.sortPartition(1,Order.ASCENDING);  //  1 is airline name
 		
 	    
 	// Step 3	
-		DataSet<Tuple2<String, Long>> flightsCraftes = aircrafts
+		DataSet<Tuple2<String, Long>> flightsCraftes = aircraftsYear
 			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
 		    
-	    DataSet<Tuple2<String,Long>> joinresult = sortedUSairlines
+	    DataSet<Tuple2<String,Long>> joinresult = USairlines
 		      .join(flightsCraftes).where(0).equalTo(0).projectFirst(1).projectSecond(1); // airline name, number of delay
 	    
 	    
@@ -153,18 +161,29 @@ public class AverageDepartureDelay {
 	    
     // Step 5
 	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = 
-	    		joinresult_num_sum_min_max.flatMap(new AvgMapper())
-	    		.setParallelism(1);
+	    		joinresult_num_sum_min_max.flatMap(new AvgMapper());
 	    		//.sortPartition(0,Order.ASCENDING);
 	    
    
 	    //write out final result
 	    finalresult.writeAsText(outputFilePath, WriteMode.OVERWRITE);   
+	    
+	    long startTime = System.currentTimeMillis();
+	    
         // execute the FLink job
-	   	env.execute("Executing task 2 program tiny");
-	   
-	  
-	
+	    env.execute("Executing task 2 program");
+	    
+	    
+	    long endTime = System.currentTimeMillis();
+	    long timeTaken = endTime-startTime;
+	    
+	    String timeFilePath = params.get("output", PATH + "results/bad_Delay_time.txt");
+	    BufferedWriter out = new BufferedWriter(new FileWriter(timeFilePath));
+	    out.write("Time taken for execution was: " + timeTaken+"\n");
+	    out.close();
+
+
+	    
 	}
 	/**
 	* Calculate delay time for each delay flight
@@ -202,7 +221,4 @@ public class AverageDepartureDelay {
 		      out.collect(new Tuple5<String,Integer,Long,Long,Long>(input_tuple.f0,input_tuple.f1,avg,input_tuple.f3,input_tuple.f4));
 		    }
 		  }
-		  
-	 
-
 }
