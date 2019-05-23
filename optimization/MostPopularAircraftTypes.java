@@ -1,13 +1,17 @@
+package optimization;
+
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase.JoinHint;
 import org.apache.flink.util.Collector;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.log4j.BasicConfigurator;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Scanner;
@@ -42,10 +46,10 @@ public class MostPopularAircraftTypes {
 		scanner.close();
 		
 		// Don't forget to change file path!
-		final String PATH = "/Users/jazlynj.m.lin/assignment_data_files/";
+		final String PATH = "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/";
 		//final String PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/";
 		final ParameterTool params = ParameterTool.fromArgs(args);
-		String outputFilePath = params.get("output", PATH + "results/most_popular_result_tiny.txt");
+		String outputFilePath = params.get("output", PATH + "results/optimize_most_popular_result_tiny.txt");
 		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/most_popular_result_tiny.txt");
 		
 		// (carrier code, tail number)
@@ -94,14 +98,14 @@ public class MostPopularAircraftTypes {
         @Override
         public boolean filter(Tuple3<String, String, String> tuple) {
             // Filter for user specified country.
-            return tuple.f2.contains("United States"); }
+            return tuple.f2.contains("United States"); }   // will change to country
         })
         .project(0, 1);
         
         // Step 2: Join datasets.
 
         // Join on carrier code.
-        // Input: (carrier code, name, country) X (carrier code, tail number)
+        // Input: (carrier code, name) X (carrier code, tail number)
         // Output: (name) X (tail number)
         DataSet<Tuple2<String, String>> flightsOnAirlines = 
             airlines.join(flights, JoinHint.BROADCAST_HASH_FIRST)
@@ -112,12 +116,12 @@ public class MostPopularAircraftTypes {
             
 
         // Join on tail number.
-        // Input: [(name) X (tail number)] X (tail_number, manufacturer, model)
+        // Input: [(name, tail number)] X (tail_number, manufacturer, model)
         // Output: [(name) X (tail number)] X (manufacturer, model)
-        Dataset<Tuple4<String, String, String, String>> finalData =
+        DataSet<Tuple4<String, String, String, String>> finalData =
             flightsOnAirlines.join(aircrafts, JoinHint.BROADCAST_HASH_FIRST)
             .where(1)
-            .equalTo(1)
+            .equalTo(0)
             .projectFirst(0,1)
             .projectSecond(1,2);
 
@@ -127,7 +131,7 @@ public class MostPopularAircraftTypes {
         // 3.2: Count unique tailNumbers
         // 3.3: Sort by airline name and tailNumber count.
 
-        // Input: [(name) X (tail number)] X (manufacturer, model)
+        // Input: [(name, tail number, manufacturer, model)
         // Output: [(name) X (tail number)] X (manufacturer, model) X (Count)
         DataSet<Tuple5<String, String, String, String, Integer>> aircraftCount =
               finalData.groupBy(1)
@@ -171,7 +175,7 @@ public class MostPopularAircraftTypes {
 
             int modelCount = 0;
             for (Tuple4<String, String, String, String> entry : combinedData) {
-                count++;
+            	modelCount++;
                 airlineName = entry.f0;
                 tailNumber = entry.f1;
                 manufacturerEntry = entry.f2;
@@ -187,16 +191,16 @@ public class MostPopularAircraftTypes {
     */
     public static class RetrieveTopFive implements GroupReduceFunction<Tuple5<String, String, String, String, Integer>, Tuple2<String, ArrayList<Tuple2 <String, String>>>> {
         @Override
-        public void reduce(Iterable<Tuple5<String, String, String, String, Integer>> entries, Collector<Tuple3<String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
+        public void reduce(Iterable<Tuple5<String, String, String, String, Integer>> entries, Collector<Tuple2<String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
             int limitCount = 0;
             ArrayList<String> modelList = new ArrayList<String>();
             String currentAirline;
             currentAirline = "";
-
+            ArrayList<Tuple2<String, String>> aircraftType = new ArrayList<Tuple2<String, String>>();
             // Iterate through list of records.
             // If we stumble upon a new airline name that is different to our current airline or we reached the limit of 5 models per airline
             // We save the current results for our current airline and update our current variables to keep note of next airline results.
-            for (Tuple5<String, String, String, String, Integer> entry : records)
+            for (Tuple5<String, String, String, String, Integer> entry : entries)
             {
                 if (currentAirline.equals(""))
                 {
@@ -213,7 +217,9 @@ public class MostPopularAircraftTypes {
                         continue;
                     }
                     else
-                    {
+                    {    
+                    	
+             
                         // New airline so output current data.
                         output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, aircraftType));
                         // Now we are on new airline name.
@@ -263,7 +269,7 @@ public class MostPopularAircraftTypes {
     * Write results out to file.
     * Collate results for output.
     */
-	private static class OutputResults implements GroupReduceFunction<DataSet<Tuple2<String, ArrayList<Tuple2<String, String>>>>, Tuple2 <String, String> > {
+	private static class OutputResults implements GroupReduceFunction<Tuple2<String, ArrayList<Tuple2<String, String>>>, Tuple2<String, String> > {
 		@Override
 		public void reduce(Iterable<Tuple2<String, ArrayList<Tuple2<String, String>>>> object, Collector<Tuple2<String, String>> output) throws Exception {
 			
