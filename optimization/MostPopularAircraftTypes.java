@@ -100,26 +100,26 @@ public class MostPopularAircraftTypes {
         
         // Step 2: Join datasets.
 
-        // Join to get <airlines.tail_number, flights.name> based on carrier code.
         // Join on carrier code.
         // Input: (carrier code, name, country) X (carrier code, tail number)
         // Output: (name) X (tail number)
         DataSet<Tuple2<String, String>> flightsOnAirlines = 
-            airlines.join(flights)
+            airlines.join(flights, JoinHint.BROADCAST_HASH_FIRST)
             .where(0)
             .equalTo(0)
-            .with(new EquiJoinFlightsWithAirlines());
+            .projectFirst(1)
+            .projectSecond(1);
+            
 
-
-        // Join to get <flightsOnAirlines.tail_number, flightsOnAirlines.name, aircrafts.model, aircrafts.year>
         // Join on tail number.
         // Input: [(name) X (tail number)] X (tail_number, manufacturer, model)
         // Output: [(name) X (tail number)] X (manufacturer, model)
         Dataset<Tuple4<String, String, String, String>> finalData =
-            flightsOnAirlines.join(aircrafts)
+            flightsOnAirlines.join(aircrafts, JoinHint.BROADCAST_HASH_FIRST)
             .where(1)
             .equalTo(1)
-            .with(new EquiJoinflightsOnAirlinesWithAircrafts());
+            .projectFirst(0,1)
+            .projectSecond(1,2);
 
         
         // Step 3: Reduce dataset and generate ordered list by airline and tailnumber.
@@ -127,7 +127,6 @@ public class MostPopularAircraftTypes {
         // 3.2: Count unique tailNumbers
         // 3.3: Sort by airline name and tailNumber count.
 
-        // <airline_name, tail_number, manufacturer, model, count>
         // Input: [(name) X (tail number)] X (manufacturer, model)
         // Output: [(name) X (tail number)] X (manufacturer, model) X (Count)
         DataSet<Tuple5<String, String, String, String, Integer>> aircraftCount =
@@ -138,7 +137,7 @@ public class MostPopularAircraftTypes {
 
 
         // Step 4: Apply reduction so that only the 5 most used tailnumbers for each airline is recorded.
-        // Input: [(name) X (tail number)] X (manufacturer, model)
+        // Input: [(name) X (tail number)] X (manufacturer, model) X (Count)
         // Output: (airlines.name, [aircrafts.manufacturer, aircrafts.model])
         DataSet<Tuple2<String, ArrayList<Tuple2<String, String>>>> finalResult = 
               aircraftCount.reduceGroup(new RetrieveTopFive());
@@ -159,29 +158,6 @@ public class MostPopularAircraftTypes {
     *** HELPER FUNCTIONS.    ****
     ****************************/
 
-  /** View step 2
-	* Equi-join filtered airlines with flights on carrier code.
-	* Return: <airlines.name, flights.tail_number>
-	*/
-	public static class EquiJoinFlightsWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple2<String, String>, Tuple2<String, String>> {
-		@Override
-		public Tuple2<String, String, String> join(Tuple2<String, String> airlines, Tuple3<String, String, String> flights){
-			return new Tuple3<>(airlines.f1, flights.f2);
-		}
-    }    
-
-  /** View step 2
-	* Equi-join flightsWithAirlines with aircraft on tail number.
-	* Return: <flightsOnAirlines.tail_number, flightsOnAirlines.name, aircrafts.model, aircrafts.year>
-	*/
-	public static class EquiJoinflightsOnAirlinesWithAircrafts implements JoinFunction<Tuple2<String, String>, Tuple3<String, String, String>, Tuple4<String, String, String, String>> {
-		@Override
-        public Tuple4<String, String, String, String> join(Tuple2<String, String> flightsOnAirlines, Tuple3<String, String, String> aircrafts)
-        {
-            // Alternatively can replace aircrafts.f0 with flightsOnAirlines.f1
-            return new Tuple4<String, String, String, String>(flightsOnAirlines.f0, aircrafts.f0, aircrafts.f1, aircrafts.f2);
-        }
-    }    
 
   /** View Step 3
     * Pipeline result to store count of model.
@@ -190,17 +166,16 @@ public class MostPopularAircraftTypes {
     public static class Rank implements GroupReduceFunction<Tuple4<String, String, String, String>, Tuple5<String, String, String, String, Integer>> {
         @Override
         public void reduce(Iterable<Tuple4<String, String, String, String>> combinedData, Collector<Tuple5<String, String, String, String, Integer>> outputTuple) throws Exception {
-            String manufacturerEntry = null;
-            String modelEntry = null;
-            String tailNumber = null;
-            String airlineName = null;
+            String manufacturerEntry,modelEntry,tailNumber,airlineName;
+            manufacturerEntry = modelEntry = tailNumber = airlineName = null;
+
             int modelCount = 0;
-            for (Tuple4<String, String, String, String> flight : combinedData) {
+            for (Tuple4<String, String, String, String> entry : combinedData) {
                 count++;
-                airlineName = flight.f0;
-                tailNumber = flight.f1;
-                manufacturerEntry = flight.f2;
-                modelEntry = flight.f3;
+                airlineName = entry.f0;
+                tailNumber = entry.f1;
+                manufacturerEntry = entry.f2;
+                modelEntry = entry.f3;
             }
             outputTuple.collect(new Tuple5<String, String, String, String, Integer>(airlineName, tailNumber, manufacturerEntry, modelEntry, modelCount));
         }
@@ -210,48 +185,77 @@ public class MostPopularAircraftTypes {
     * Pipeline result to store count of model.
     * Return: (airlines.name, [aircrafts.manufacturer, aircrafts.model])
     */
-    public static class RetrieveTopFive implements GroupReduceFunction<Tuple6<String, String, String, String, String, Integer>, Tuple3<String, String, ArrayList<Tuple2 <String, String>>>> {
+    public static class RetrieveTopFive implements GroupReduceFunction<Tuple5<String, String, String, String, Integer>, Tuple2<String, ArrayList<Tuple2 <String, String>>>> {
         @Override
-        public void reduce(Iterable<Tuple6<String, String, String, String, String, Integer>> entries, Collector<Tuple3<String, String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
-            String currentAirline = "";
-            ArrayList<String> modelMostUsed = new ArrayList<String>();
-            ArrayList<Tuple2<String, String>> mostUsedList = new ArrayList<Tuple2<String, String>>();
-            int counter = 0;        //Counter to limit output tuples to 5 per airline
-            for (Tuple6<String, String, String, String, String, Integer> flight : records) {
+        public void reduce(Iterable<Tuple5<String, String, String, String, Integer>> entries, Collector<Tuple3<String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
+            int limitCount = 0;
+            ArrayList<String> modelList = new ArrayList<String>();
+            String currentAirline;
+            currentAirline = "";
+
+            // Iterate through list of records.
+            // If we stumble upon a new airline name that is different to our current airline or we reached the limit of 5 models per airline
+            // We save the current results for our current airline and update our current variables to keep note of next airline results.
+            for (Tuple5<String, String, String, String, Integer> entry : records)
+            {
                 if (currentAirline.equals(""))
                 {
                     // For first row.
-                    currentAirline = flight.f0;
+                    currentAirline = entry.f0;
                 } 
-                if (counter == 5 || !(flight.f0.equals(currentAirline)))
+
+                // Hit our limit of 5.
+                if (limitCount == 5)
                 {
-                    if (flight.f0.equals(currentAirline))
+                    if(entry.f0.equals(currentAirline))
                     {
-                        // We just used up the max count so continue on.
+                        // We just keep moving on.
                         continue;
                     }
-                    // New flight name so need to output result and update current airline.
-                    output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, mostUsedList));
-                    
-                    // Now we are on new airline name.
-                    modelMostUsed.clear();
-                    mostUsedList.clear();
-                    currentAirline = flight.f0;
-                    counter = 0;
+                    else
+                    {
+                        // New airline so output current data.
+                        output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, aircraftType));
+                        // Now we are on new airline name.
+                        modelList.clear();
+                        aircraftType.clear();
+                        currentAirline = entry.f0;
+                        limitCount = 0;
+
+                        // New model so let's keep track of it.
+                        modelList.add(entry.f3);
+                        aircraftType.add(new Tuple2<String, String>(entry.f2, entry.f3));
+                        limitCount++;
+                        continue;     
+                    }
+
                 }
-                if (modelMostUsed.contains(flight.f3))
+
+                if (modelList.contains(entry.f3))
                 {
                     // Model has been seen before. Continue.
                     continue;
                 } 
 
-                // New model so let's keep track of it.
-                modelMostUsed.add(flight.f3);
-                mostUsedList.add(new Tuple2<String, String>(flight.f2, flight.f3));
-                counter++;
+                if(!(entry.f0.equals(currentAirline)))
+                {
+                    // New airline so output current data.
+                    output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, aircraftType));
+                    // Now we are on new airline name.
+                    modelList.clear();
+                    aircraftType.clear();
+                    currentAirline = entry.f0;
+                    limitCount = 0;
+
+                    // New model so let's keep track of it.
+                    modelList.add(entry.f3);
+                    aircraftType.add(new Tuple2<String, String>(entry.f2, entry.f3));
+                    limitCount++;
+                    continue;                    
+                }
             }
             // Don't forget about the last one!
-            output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, mostUsedList));
+            output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, aircraftType));
         }
     }
 
