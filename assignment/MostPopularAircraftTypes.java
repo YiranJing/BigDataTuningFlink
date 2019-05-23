@@ -88,7 +88,6 @@ public class MostPopularAircraftTypes {
 
         // Step 1: Join datasets.
 
-        // Join to get <airlines.tail_number, flights.name> based on carrier code.
         // Join on carrier code.
         // Input: (carrier code, name, country) X (carrier code, tail number)
         // Output: (name, country) X (tail number)
@@ -99,7 +98,6 @@ public class MostPopularAircraftTypes {
             .with(new EquiJoinFlightsWithAirlines());
 
 
-        // Join to get <flightsOnAirlines.tail_number, flightsOnAirlines.name, aircrafts.model, aircrafts.year>
         // Join on tail number.
         // Input: [(name, country) X (tail number)] X (tail_number, manufacturer, model)
         // Output: [(name, country) X (tail number)] X (manufacturer, model)
@@ -115,7 +113,6 @@ public class MostPopularAircraftTypes {
         // 2.2: Count unique tailNumbers
         // 2.3: Sort by airline name and tailNumber count.
 
-        // <airline_name, tail_number, manufacturer, model, count>
         // Input: [(name) X (tail number)] X (manufacturer, model)
         // Output: [(name) X (tail number)] X (manufacturer, model) X (Count)
         DataSet<Tuple6<String, String, String, String, String, Integer>> aircraftCount =
@@ -215,47 +212,77 @@ public class MostPopularAircraftTypes {
         @Override
         public void reduce(Iterable<Tuple6<String, String, String, String, String, Integer>> entries, Collector<Tuple3<String, String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
             int limitCount = 0;
-            ArrayList<String> modelMostUsed = new ArrayList<String>();
+            ArrayList<String> modelList = new ArrayList<String>();
             String currentAirline, countryName;
             currentAirline = countryName = "";
-            ArrayList<Tuple2<String, String>> mostUsedList = new ArrayList<Tuple2<String, String>>();
+            ArrayList<Tuple2<String, String>> aircraftType = new ArrayList<Tuple2<String, String>>();
             
-            for (Tuple6<String, String, String, String, String, Integer> entry : records) {
+            // Iterate through list of records.
+            // If we stumble upon a new airline name that is different to our current airline or we reached the limit of 5 models per airline
+            // We save the current results for our current airline and update our current variables to keep note of next airline results.
+
+            for (Tuple6<String, String, String, String, String, Integer> entry : records)
+            {
                 countryName = entry.f1;
                 if (currentAirline.equals(""))
                 {
                     // For first row.
                     currentAirline = entry.f0;
                 } 
-                if (!(entry.f0.equals(currentAirline)) || limitCount == 5)
+
+                // Hit our limit of 5.
+                if (limitCount == 5)
                 {
-                    if (entry.f0.equals(currentAirline))
+                    if(entry.f0.equals(currentAirline))
                     {
-                        // We just used up the max count so continue on.
+                        // We just keep moving on.
                         continue;
                     }
-                    // New entry name so need to output result and update current airline.
-                    output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, mostUsedList));
-                    
-                    // Now we are on new airline name.
-                    modelMostUsed.clear();
-                    mostUsedList.clear();
-                    currentAirline = entry.f0;
-                    limitCount = 0;
+                    else
+                    {
+                        // New airline so output current data.
+                        output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, aircraftType));
+                        // Now we are on new airline name.
+                        modelList.clear();
+                        aircraftType.clear();
+                        currentAirline = entry.f0;
+                        limitCount = 0;
+
+                        // New model so let's keep track of it.
+                        modelList.add(entry.f4);
+                        aircraftType.add(new Tuple2<String, String>(entry.f3, entry.f4));
+                        limitCount++;
+
+                        continue;
+                    }
+
                 }
-                if (modelMostUsed.contains(entry.f4))
+
+                if (modelList.contains(entry.f4))
                 {
                     // Model has been seen before. Continue.
                     continue;
                 } 
 
-                // New model so let's keep track of it.
-                modelMostUsed.add(entry.f4);
-                mostUsedList.add(new Tuple2<String, String>(entry.f3, entry.f4));
-                limitCount++;
+                if(!(entry.f0.equals(currentAirline)))
+                {
+                    // New airline so output current data.
+                    output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, aircraftType));
+                    // Now we are on new airline name.
+                    modelList.clear();
+                    aircraftType.clear();
+                    currentAirline = entry.f0;
+                    limitCount = 0;
+
+                    // New model so let's keep track of it.
+                    modelList.add(entry.f4);
+                    aircraftType.add(new Tuple2<String, String>(entry.f3, entry.f4));
+                    limitCount++;
+                    continue;                    
+                }
             }
             // Don't forget about the last one!
-            output.collect(new Tuple3<String, String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, mostUsedList));
+            output.collect(new Tuple3<String, String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, aircraftType));
         }
     }
 
@@ -275,7 +302,8 @@ public class MostPopularAircraftTypes {
 					line = "[";
 			}
 				if(count.f0.equals(head)){
-					if(line.length() != 1){
+                    if(line.length() != 1)
+                    {
 						line += ", ";
                     }
                     // Construct string for manufacturer + ' ' + model.
