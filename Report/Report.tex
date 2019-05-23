@@ -97,27 +97,34 @@
 \phantomsection
 \addcontentsline{toc}{section}{Job Design Documentation}
 \section*{Job Design Documentation}
-\addcontentsline{toc}{subsection}{Task 1}
+\addcontentsline{toc}{subsection}{Task 1: Top-3 Cessna Models}
 \subsection*{Task 1: Top 3 Cessna Models}
 We imported the csv files containing the relevant fields. We then joined the ontimeperformance\_flights with ontimeperformance\_aircrafts and projected the relevant columns. We then applied a filter function to only return aircrafts with the model equaled to "CESSNA". Finally, we applied a flatmap to count all the instances of the Cessna model, rank them in descending order, and return the top 3 Cessna model aircrafts.
-\addcontentsline{toc}{subsection}{Task 2}
-\subsection*{Task 2}
-Blah blah.
-\addcontentsline{toc}{subsection}{Task 3}
-\subsection*{Task 3}
-Join join join.
+\addcontentsline{toc}{subsection}{Task 2 Average Departure Delay}
+\subsection*{Task 2 Average Departure Delay}
+We import the csv files with the relevant fields. We first filter the dataset according to
+\begin{enumerate}
+\item Contain only US Airlines;
+\item Select the specified year by the user;
+\item Removing cancelled flights.
+\end{enumerate}
+Then, we sort the data by airline name in ascending order. We then join the datasets and project relevant fields. We then apply a combination of flatMaps and group by's and then aggregate the result using airline names to compute the cumulative, minimum, and maximum delay time. We then apply a flatMap function to compute the average based off the previous step.
+\addcontentsline{toc}{subsection}{Task 3: Most Popular Aircraft Types}
+\subsection*{Task 3: Most Popular Aircraft Types}
+We read in the data from all 3 files to include relevant fields. We then join the flights data on the aircrafts data and project the revelant fields. We then take the result of the previous join and join that with the airlines dataset and again project the relevant fields. We then apply a filter function to retrieve US flights. Finally, we apply 2 GroupReduceFunction where the first GroupReduceFunction iterates through and construct a count of how frequent each model appears. We then sort the results of this in descending order and retrieve the first 5 results. We then apply another reduceGroup function to retrieve and format the string necessary for the output according to specifications.
+
 \newpage{}
 
 \phantomsection
 \addcontentsline{toc}{section}{Tuning Decisions and Evaluation}
 \section*{Tuning Decisions and Evaluation}
-\addcontentsline{toc}{subsection}{Task 1}
+\addcontentsline{toc}{subsection}{Task 1: Top-3 Cessna Models}
 \subsection*{Task 1: Top-3 Cessna Models}
 Blah blah blah
-\addcontentsline{toc}{subsection}{Task 2}
+\addcontentsline{toc}{subsection}{Task 2 Average Departure Delay}
 \subsection*{Task 2: Average Departure Delay}
 We use a broadcash hash join if a file is significantly smaller than another. The rationale is that a hash join will be executed whereby the data will be split into buckets, that are later merged. This achieves a speed up in run time in comparison to traditional loop joins.
-\addcontentsline{toc}{subsection}{Task 3}
+\addcontentsline{toc}{subsection}{Task 3: Most Popular Aircraft Types}
 \subsection*{Task 3: Most Popular Aircraft Types}
 Join join join.
 \newpage{}
@@ -127,12 +134,12 @@ Join join join.
 \addcontentsline{toc}{section}{Performance Evaluation}
 \section*{Performance Evaluation}
 \addcontentsline{toc}{subsection}{Task 1: Top-3 Cessna Models}
-\subsection*{Task 1}
+\subsection*{Task 1: Top-3 Cessna Models}
 blah blah blah
 \addcontentsline{toc}{subsection}{Task 2: Average Departure Delay}
-\subsection*{Task 2}
+\subsection*{Task 2: Average Departure Delay}
 Blah blah blah 
-\addcontentsline{toc}{subsection}{Task 3}
+\addcontentsline{toc}{subsection}{Task 3: Most Popular Aircraft Types}
 \subsection*{Task 3: Most Popular Aircraft Types}
 Join join join.
 \newpage{}
