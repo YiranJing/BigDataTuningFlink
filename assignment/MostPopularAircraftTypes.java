@@ -158,10 +158,10 @@ public class MostPopularAircraftTypes {
 	* Equi-join filtered airlines with flights on carrier code.
 	* Return: <airlines.name, airlines.country flights.tail_number>
 	*/
-	public static class EquiJoinFlightsWithAirlines implements JoinFunction<Tuple3<String, String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
+	public static class EquiJoinFlightsWithAirlines implements JoinFunction<Tuple3<String, String, String>, Tuple2<String, String>, Tuple3<String, String, String>> {
 		@Override
-		public Tuple3<String, String, String, String> join(Tuple3<String, String, String> airlines, Tuple3<String, String, String> flights){
-			return new Tuple3<>(airlines.f1, airlines.f2, flights.f2);
+		public Tuple3<String, String, String, String> join(Tuple3<String, String, String> airlines, Tuple2<String, String> flights){
+			return new Tuple3<>(airlines.f1, airlines.f2, flights.f1);
 		}
     }    
 
