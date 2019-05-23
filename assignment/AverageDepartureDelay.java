@@ -23,6 +23,8 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFields;
+
 import java.util.concurrent.TimeUnit;
 import java.util.Scanner;
 
@@ -58,23 +60,23 @@ public class AverageDepartureDelay {
 	    // obtain handle to execution environment
 	    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 	    
-	    DataSet<Tuple4<String, String,String,String>> flights =
+	    DataSet<Tuple5<String, String, String,String,String>> flights =
 			      env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
-			      .includeFields("0100001101") 
+			      .includeFields("0101001101")  // carrier_code, flight_date, tail_number, scheduled_depar, actual_departure
 			      .ignoreFirstLine() 
 			      .ignoreInvalidLines() 
-			      .types(String.class,String.class,String.class,String.class); 
+			      .types(String.class,String.class,String.class, String.class,String.class); 
 	    
-	    DataSet<Tuple2<String,String>> aircrafts =
+	    DataSet<Tuple1<String>> aircrafts =
 	    		  env.readCsvFile(PATH +"ontimeperformance_aircrafts.csv")
-	    		  .includeFields("100000001") 
+	    		  .includeFields("1") // tail_number
 		          .ignoreFirstLine() 
 		          .ignoreInvalidLines() 
-		          .types(String.class, String.class); 
+		          .types(String.class); 
 	    
 	    DataSet<Tuple3<String, String,String>> airlines =
 			      env.readCsvFile(PATH +"ontimeperformance_airlines.csv")
-			      .includeFields("111") 
+			      .includeFields("111") // carrier_code, name and country
 			      .ignoreFirstLine() 
 			      .ignoreInvalidLines() 
 			      .types(String.class,String.class, String.class); 
@@ -93,13 +95,12 @@ public class AverageDepartureDelay {
 		*    b) Filter for specific year
 		*    c) Filter out cancelled flights, only keep delayed flights, and then compute delay for each flight
 		* 
-		* 2) Sorted Airline name in ascending order
-		* 3) Join three filtered data sets
-		* 4) Group by and Aggregate the result using Airline name, for number, sum, min and max delay time 
-		* 5) Compute the average time
+		* 2) Join three filtered data sets
+		* 3) Group by and Aggregate the result using Airline name, for number, sum, min and max delay time 
+		* 4) Compute the average time
+		* 5) Sorted Airline name in ascending order
 		****************************/
 	    
-	// Step 1 a)
 	    DataSet<Tuple2<String, String>> USairlines = 
 				airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
 				@Override
@@ -109,18 +110,20 @@ public class AverageDepartureDelay {
 				})
 				.project(0, 1);
 	    
-	    
-	    
-	// Step 1 b) 
-		DataSet<Tuple1<String>> aircraftsYear =
-		    		aircrafts.filter(new FilterFunction<Tuple2<String,String>>() {
-		                            public boolean filter(Tuple2<String, String> entry) { return entry.f1.equals(year); } 
-		            }).project(0); 
-	   
 		
+	 // Step 1 b)   
+	    DataSet<Tuple4<String, String, String,String>>flightsYear = 
+	    		flights.filter(new FilterFunction<Tuple5<String, String, String, String, String>>() {
+	    		@Override
+				public boolean filter(Tuple5<String, String, String,String, String> tuple) {
+						// Filter for given year
+					return tuple.f1.substring(0,4).equals(year); } 
+		        }).project(0,2,3,4); 
+	    
+	    
     // Step 1 c)
 	    DataSet<Tuple3<String,String,Long>>flightsDelay =
-	    		    flights.filter(new FilterFunction<Tuple4<String, String, String, String>>() {
+	    		     flightsYear.filter(new FilterFunction<Tuple4<String, String, String, String>>() {
 	                            public boolean filter(Tuple4<String, String,String,String> entry){
 	                            	try {
 	                            	return (format.parse(entry.f2).getTime() < format.parse(entry.f3).getTime());}  // filter only delayed flights
@@ -131,12 +134,10 @@ public class AverageDepartureDelay {
 	                            } 
 	                     }).flatMap(new TimeDifferenceMapper());
     
-	 //Step 2)    
-	    DataSet<Tuple2<String, String>> surtedUSairlines = USairlines.sortPartition(1,Order.ASCENDING);  //  1 is airline name
-		
+    
 	    
-	// Step 3	
-		DataSet<Tuple2<String, Long>> flightsCraftes = aircraftsYear
+	// Step 2
+		DataSet<Tuple2<String, Long>> flightsCraftes = aircrafts
 			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
 		    
 	    DataSet<Tuple2<String,Long>> joinresult = USairlines
@@ -144,7 +145,7 @@ public class AverageDepartureDelay {
 	    
 	    
 	    
-	// Step 4
+	// Step 3
 	    DataSet<Tuple2<String,Integer>> joinresult_num = joinresult.flatMap(new NumMapper())
 	    	      .groupBy(0) 
 	    	      .sum(1);  
@@ -159,12 +160,12 @@ public class AverageDepartureDelay {
 	    		.join(joinresult_num_sum_min).where(0).equalTo(0).projectSecond(0,1,2,3).projectFirst(1);
 	    
 	    
-    // Step 5
+    // Step 4,5 
 	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = 
-	    		joinresult_num_sum_min_max.flatMap(new AvgMapper());
-	    		//.sortPartition(0,Order.ASCENDING);
+	    		joinresult_num_sum_min_max.flatMap(new AvgMapper())
+	    		.sortPartition(0,Order.ASCENDING).setParallelism(1);
 	    
-   
+   2
 	    //write out final result
 	    finalresult.writeAsText(outputFilePath, WriteMode.OVERWRITE);   
 	    

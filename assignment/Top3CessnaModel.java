@@ -36,8 +36,9 @@ public class Top3CessnaModel {
 			final ParameterTool params = ParameterTool.fromArgs(args);
 			String outputFilePath = params.get("output", PATH + "results/top_3_cessna_tiny.txt");
 			//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/top_3_cessna_tiny.txt");
-  
+     
 		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+		    
 		    DataSet<Tuple3<String,String, String>> models =
 		    			  env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 				      //env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_aircrafts.csv")
@@ -69,7 +70,7 @@ public class Top3CessnaModel {
 				    // Step 1
 				    DataSet<Tuple4<String, String, String, String>> joinresult =
 				    		//modelsCessna.join(flights, JoinHint.BROADCAST_HASH_FIRST).where(0).equalTo(0).projectFirst(1); 
-				       flights.join(models, JoinHint.BROADCAST_HASH_FIRST).where(0).equalTo(0)
+				       flights.join(models).where(0).equalTo(0)
 				       .projectFirst(0)
 				       .projectSecond(0,1,2);
 				     

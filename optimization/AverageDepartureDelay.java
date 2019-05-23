@@ -30,6 +30,7 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFields;
 import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsFirst;
 import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsSecond;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ReadFields;
 
 
 public class AverageDepartureDelay {
@@ -61,6 +62,7 @@ public class AverageDepartureDelay {
 	    // obtain handle to execution environment
 	    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 	    
+	    
 	    DataSet<Tuple5<String, String, String,String,String>> flights =
 			      env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
 			      .includeFields("0101001101")  // carrier_code, flight_date, tail_number, scheduled_depar, actual_departure
@@ -70,14 +72,14 @@ public class AverageDepartureDelay {
 	    
 	    DataSet<Tuple1<String>> aircrafts =
 	    		  env.readCsvFile(PATH +"ontimeperformance_aircrafts.csv")
-	    		  .includeFields("1") 
+	    		  .includeFields("1") // tail_number
 		          .ignoreFirstLine() 
 		          .ignoreInvalidLines() 
 		          .types(String.class); 
 	    
 	    DataSet<Tuple3<String, String,String>> airlines =
 			      env.readCsvFile(PATH +"ontimeperformance_airlines.csv")
-			      .includeFields("111") 
+			      .includeFields("111") // carrier_code, name and country
 			      .ignoreFirstLine() 
 			      .ignoreInvalidLines() 
 			      .types(String.class,String.class, String.class); 
@@ -151,8 +153,12 @@ public class AverageDepartureDelay {
 	    
 	// Step 4
 	    
-	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = joinresult.groupBy(0).reduceGroup(new Aggregation())
+	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = 
+	    		joinresult
+	    		.groupBy(0)
+	    		.reduceGroup(new Aggregation())
 	    		.setParallelism(1);
+	    		
 	    		
 
 	    //write out final result
@@ -181,6 +187,7 @@ public class AverageDepartureDelay {
 	* View step 1 c)
 	*/
 	 @ForwardedFields("0;1") // Specify that the first and second element is copied without any changes
+	 @ReadFields("2;3") // specifies what fields were used to compute a result value
 	 private static class TimeDifferenceMapper implements FlatMapFunction<Tuple4<String, String, String, String>, Tuple3<String,String,Long>>{
 	     SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
 	          @Override
