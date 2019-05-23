@@ -1,5 +1,3 @@
-package data_group_assignment_version2;
-
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
@@ -50,7 +48,7 @@ public class MostPopularAircraftTypes {
 		String outputFilePath = params.get("output", PATH + "results/most_popular_result_tiny.txt");
 		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/most_popular_result_tiny.txt");
 		
-		// carrier code + tail number
+		// (carrier code, tail number)
 		DataSet<Tuple2<String, String>> flights =
 		env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_flights_tiny.csv")
@@ -59,7 +57,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class);
 		
-		// carrier code + name + country
+		// (carrier code, name, country)
 		DataSet<Tuple3<String, String, String>> airlines =
 		env.readCsvFile(PATH + "ontimeperformance_airlines.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_airlines.csv")
@@ -68,11 +66,11 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class, String.class);
 		
-		// tail number + manufacturer + model
+		// (tail_number, manufacturer, model)
 		DataSet<Tuple3<String, String, String>> aircrafts =
 		env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_aircrafts.csv")
-						.includeFields("101010000")
+						.includeFields("10101")
 						.ignoreFirstLine()
 						.ignoreInvalidLines()
 						.types(String.class, String.class, String.class);
@@ -82,137 +80,196 @@ public class MostPopularAircraftTypes {
 		****************************/						
 
 		/****************************
-		*	Implementation
-		*	1) flights join aircrafts join airlines
-		*   2) Apply filter for United States
+        *	Implementation
+        *	1) flights join aircrafts join airlines
+        *   2) Apply filter for United States
 		*   3) Rank grouped by aircraft types
 		****************************/
-			
-		// Step 1 carrier code + tail number + manufacturer + model (tail number)
-		DataSet<Tuple2<String, String>> flightsOnAircrafts =
-			flights.join(aircrafts)
-			.where(1)
-			.equalTo(0)
-			.with(new EquiJoinAirlinesCountry());
 
-		// carrier code + name + country + tail number + manufacturer + model 
-		DataSet<Tuple3<String, String, String>> completeData =
-			flightsOnAircrafts.join(airlines)
-			.where(0)
-			.equalTo(0)
-			.with(new EquiJoinFlightAircraftWithAirlines());
-       
+        // Step 1: Join datasets.
+
+        // Join to get <airlines.tail_number, flights.name> based on carrier code.
+        // Join on carrier code.
+        // Input: (carrier code, name, country) X (carrier code, tail number)
+        // Output: (name, country) X (tail number)
+        DataSet<Tuple3<String, String, String>> flightsOnAirlines = 
+            airlines.join(flights)
+            .where(0)
+            .equalTo(0)
+            .with(new EquiJoinFlightsWithAirlines());
 
 
-		// Step 2 carrier code  + name
-		DataSet<Tuple2<String, String>> finalResult = 
-			completeData.filter(new FilterFunction<Tuple3<String, String, String>>() {
-			@Override
-			public boolean filter(Tuple3<String, String, String> tuple) {
-				// Filter for United States
-				return tuple.f2.contains(country); }
-			})
-			.project(0, 1);
-       
-		
+        // Join to get <flightsOnAirlines.tail_number, flightsOnAirlines.name, aircrafts.model, aircrafts.year>
+        // Join on tail number.
+        // Input: [(name, country) X (tail number)] X (tail_number, manufacturer, model)
+        // Output: [(name, country) X (tail number)] X (manufacturer, model)
+        Dataset<Tuple5<String, String, String, String, String>> finalData =
+            flightsOnAirlines.join(aircrafts)
+            .where(2)
+            .equalTo(0)
+            .with(new EquiJoinflightsOnAirlinesWithAircrafts());
 
-		// Step 3
-		
-			//finalResult.reduceGroup(new Test());
-			
-			DataSet<Tuple3<String, String, Integer>> finalResult1 = finalResult.reduceGroup(new Rank());
-			
-			
-			DataSet<Tuple2<String, String>> finalResult2 = finalResult1
-				.groupBy(0)
-				.sortGroup(2, Order.DESCENDING)
-				.first(5)
-				.groupBy(0)
-				.sortGroup(2, Order.DESCENDING)
-				.reduceGroup(new Concat())
-				.sortPartition(0, Order.ASCENDING)
-				.setParallelism(1);
+        
+        // Step 2: Reduce dataset and generate ordered list by airline and tailnumber.
+        // 2.1: Group data by tailNumber
+        // 2.2: Count unique tailNumbers
+        // 2.3: Sort by airline name and tailNumber count.
 
-				finalResult2.writeAsText(outputFilePath, WriteMode.OVERWRITE);
-				
-				long startTime = System.currentTimeMillis();
-				    
-		        // execute the FLink job
-				env.execute("Executing task 3 program");
-			    
-			    
-			    long endTime = System.currentTimeMillis();
-			    long timeTaken = endTime-startTime;
-			    
-			    String timeFilePath = params.get("output", PATH + "results/Most_popular_time.txt");
-			    BufferedWriter out = new BufferedWriter(new FileWriter(timeFilePath));
-			    out.write("Time taken for execution was: " + timeTaken+"\n");
-			    out.close();
+        // <airline_name, tail_number, manufacturer, model, count>
+        // Input: [(name) X (tail number)] X (manufacturer, model)
+        // Output: [(name) X (tail number)] X (manufacturer, model) X (Count)
+        DataSet<Tuple6<String, String, String, String, String, Integer>> aircraftCount =
+              finalData.groupBy(2) // Tail number
+              .reduceGroup(new Rank())
+              .sortPartition(0, Order.ASCENDING)
+              .sortPartition(5, Order.DESCENDING);
+
+
+        // Step 3: Apply reduction so that only the 5 most used tailnumbers for each airline is recorded.
+        // Input: [(name) X (tail number)] X (manufacturer, model)
+        // Output: (airlines.name, [aircrafts.manufacturer, aircrafts.model])
+        DataSet<Tuple3<String, String, ArrayList<Tuple2<String, String>>>> finalResult = 
+              aircraftCount.reduceGroup(new RetrieveTopFive());
+        
+        
+        // Step 4: Get US airlines.
+        finalResult.filter(new FilterFunction<Tuple3<String, String, ArrayList<Tuple2<String, String>>>>() {
+            @Override
+            public boolean filter(Tuple3<String, String, String> tuple) {
+                // Filter for user specified country.
+                return tuple.f1.contains("United States"); }
+            })
+            .project(0, 2);
+
+        
+        // Step 5: Retrieve and write out results from step 4 into file.
+        // Input: (airlines.name, [aircrafts.manufacturer, aircrafts.model])
+        // Output: (airlines.name, [aircraft_type1, ..., aircraft_type5])
+        DataSet<Tuple2<String, String>> outputResult = finalResult
+        .reduceGroup(new OutputResults())
+        .sortPartition(0, Order.ASCENDING);
+        
+        outputResult.writeAsText(outputFilePath, WriteMode.OVERWRITE);
+    
 		}
 
-	
-	 /**
-		* Equi-join flights and aircrafts csv.
-		* View step 1
-	  */
-	private static class EquiJoinAirlinesCountry implements JoinFunction <Tuple2<String, String>, Tuple3<String, String, String>, Tuple2<String, String>> {
-		@Override
-		public Tuple2<String, String> join(Tuple2<String, String> flightsData, Tuple3<String, String, String> aircraftsData){
-			return new Tuple2<>(flightsData.f0, aircraftsData.f1 + " " + aircraftsData.f2);
-		}
-	}
+    /****************************
+    *** HELPER FUNCTIONS.    ****
+    ****************************/
 
- /**
-	* Equi-join flights/aircrafts with airlines csv.
-	* View step 1
+  /** View step 2
+	* Equi-join filtered airlines with flights on carrier code.
+	* Return: <airlines.name, airlines.country flights.tail_number>
 	*/
-	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
+	public static class EquiJoinFlightsWithAirlines implements JoinFunction<Tuple3<String, String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
 		@Override
-		public Tuple3<String, String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple3<String, String, String> airlinesData){
-			return new Tuple3<>(airlinesData.f1, flightsOnAircraftsData.f1, airlinesData.f2);
+		public Tuple3<String, String, String, String> join(Tuple3<String, String, String> airlines, Tuple3<String, String, String> flights){
+			return new Tuple3<>(airlines.f1, airlines.f2, flights.f2);
 		}
-	}
+    }    
 
-	/**
-	* Rank the groupings
-	* View step 3
+  /** View step 2
+	* Equi-join flightsWithAirlines with aircraft on tail number.
+	* Return: <flightsOnAirlines.tail_number, flightsOnAirlines.name, aircrafts.model, aircrafts.year>
 	*/
-	public static class Rank implements GroupReduceFunction<Tuple2<String, String>, Tuple3<String, String, Integer>> {
-		
+	public static class EquiJoinflightsOnAirlinesWithAircrafts implements JoinFunction<Tuple3<String, String, String>, Tuple3<String, String, String>, Tuple5<String, String, String, String, String>> {
 		@Override
-		public void reduce(Iterable<Tuple2<String, String>> combinedData, Collector<Tuple3<String, String, Integer>> result) {
-			
-			HashMap<String, Integer> counter = new HashMap<String, Integer>(); // To help us construct data at the end.
-				
+        public Tuple5<String, String, String, String, String> join(Tuple3<String,String, String> flightsOnAirlines, Tuple3<String, String, String> aircrafts)
+        {
+            // Alternatively can replace aircrafts.f0 with flightsOnAirlines.f1
+            return new Tuple4<String, String, String, String>(flightsOnAirlines.f0,flightsOnAirlines.f1, aircrafts.f0, aircrafts.f1, aircrafts.f2);
+        }
+    }    
 
-			// Count how often entry appears.
-			for(Tuple2<String, String> entry: combinedData) {
-				String line = entry.f0 + "%" + entry.f1;
-				int count = counter.containsKey(line) ? counter.get(line) : 0;
-				counter.put(line, count + 1);
-					
-				
-			}
-			// Collect result of count.
-			for(String key : counter.keySet()){
-				int count = counter.get(key);
-				String [] tuple = key.split("%"); // To help us store information.
-				result.collect(new Tuple3 <> (tuple[0], tuple[1], count));
-			}
-		}
-	}
+  /** View Step 3
+    * Pipeline result to store count of model.
+    * Return: [(name) X (tail number)] X (manufacturer, model) X (Count)
+    */
+    public static class Rank implements GroupReduceFunction<Tuple5<String,String, String, String, String>, Tuple6<String,String, String, String, String, Integer>> {
+        @Override
+        public void reduce(Iterable<Tuple5<String,String, String, String, String>> combinedData, Collector<Tuple6<String, String, String,String, String, Integer>> outputTuple) throws Exception {
+            // To keep track of values for each tail number.
+            String manufacturerEntry,modelEntry,tailNumber,airlineName,countryName;
+            manufacturerEntry = modelEntry = tailNumber = airlineName = countryName = null;
 
- /**
-	* Constructs and concatenates filtered result for final output.
-	* View step 3
-	*/
-	private static class Concat implements GroupReduceFunction<Tuple3<String, String, Integer>, Tuple2 <String, String>> {
+            int modelCount = 0;
+            for (Tuple5<String, String, String, String, String> entry : combinedData)
+            {
+                // Iterate through and count for each tail number.
+                count++;
+                airlineName = entry.f0;
+                countrName = entry.f1;
+                tailNumber = entry.f2;
+                manufacturerEntry = entry.f3;
+                modelEntry = entry.f4;
+            }
+            outputTuple.collect(new Tuple6<String,String, String, String, String, Integer>(airlineName, countryName, tailNumber, manufacturerEntry, modelEntry, modelCount));
+        }
+    }
+
+  /** View Step 4
+    * Pipeline result to store count of model.
+    * Return: (airlines.name, [aircrafts.manufacturer, aircrafts.model])
+    */
+    public static class RetrieveTopFive implements GroupReduceFunction<Tuple6<String, String, String, String, String, Integer>, Tuple3<String, String, ArrayList<Tuple2 <String, String>>>> {
+        @Override
+        public void reduce(Iterable<Tuple6<String, String, String, String, String, Integer>> entries, Collector<Tuple3<String, String, ArrayList<Tuple2 <String, String>>>> output) throws Exception {
+            int limitCount = 0;
+            ArrayList<String> modelMostUsed = new ArrayList<String>();
+            String currentAirline, countryName;
+            currentAirline = countryName = "";
+            ArrayList<Tuple2<String, String>> mostUsedList = new ArrayList<Tuple2<String, String>>();
+            
+            for (Tuple6<String, String, String, String, String, Integer> entry : records) {
+                countryName = entry.f1;
+                if (currentAirline.equals(""))
+                {
+                    // For first row.
+                    currentAirline = entry.f0;
+                } 
+                if (!(entry.f0.equals(currentAirline)) || limitCount == 5)
+                {
+                    if (entry.f0.equals(currentAirline))
+                    {
+                        // We just used up the max count so continue on.
+                        continue;
+                    }
+                    // New entry name so need to output result and update current airline.
+                    output.collect(new Tuple2<String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, mostUsedList));
+                    
+                    // Now we are on new airline name.
+                    modelMostUsed.clear();
+                    mostUsedList.clear();
+                    currentAirline = entry.f0;
+                    limitCount = 0;
+                }
+                if (modelMostUsed.contains(entry.f4))
+                {
+                    // Model has been seen before. Continue.
+                    continue;
+                } 
+
+                // New model so let's keep track of it.
+                modelMostUsed.add(entry.f4);
+                mostUsedList.add(new Tuple2<String, String>(entry.f3, entry.f4));
+                limitCount++;
+            }
+            // Don't forget about the last one!
+            output.collect(new Tuple3<String, String, ArrayList<Tuple2<String, String>>>(currentAirline, countryName, mostUsedList));
+        }
+    }
+
+  /** View Step 5
+    * Write results out to file.
+    * Collate results for output.
+    */
+	private static class OutputResults implements GroupReduceFunction<DataSet<Tuple2<String, ArrayList<Tuple2<String, String>>>>, Tuple2 <String, String> > {
 		@Override
-		public void reduce(Iterable<Tuple3<String, String, Integer>> object, Collector<Tuple2<String, String>> output) throws Exception {
+		public void reduce(Iterable<Tuple2<String, ArrayList<Tuple2<String, String>>>> object, Collector<Tuple2<String, String>> output) throws Exception {
 			
 			String head = null; 
 			String line = null;
-			for(Tuple3<String, String, Integer> count : object){
+			for(Tuple2<String,  ArrayList<Tuple2<String, String>>> count : object){
 				if(head == null){
 					head = count.f0;
 					line = "[";
@@ -220,8 +277,9 @@ public class MostPopularAircraftTypes {
 				if(count.f0.equals(head)){
 					if(line.length() != 1){
 						line += ", ";
-					}
-					line += count.f1;
+                    }
+                    // Construct string for manufacturer + ' ' + model.
+                    line += count.f1.get(0) + " " + count.f1.get(1);
 				}
 			}
 			line += "]";
