@@ -17,6 +17,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFields;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ReadFields;
 
 
 public class Top3CessnaModel {
@@ -34,7 +35,7 @@ public class Top3CessnaModel {
 			String outputFilePath = params.get("output", PATH + "results/optimization_top_3_cessna_medium.txt");
     
 		    ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-
+		    
 		    DataSet<Tuple3<String,String, String>> models =
 		      env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 		      .includeFields("10101") 
@@ -76,9 +77,9 @@ public class Top3CessnaModel {
 	    // Step 3
 		    joinresult.flatMap(new CountFlightPerModel())
 		      .groupBy(0) // group by different model of cessna
-		      .sum(1)          
+		      .sum(1)       
 		      .sortPartition(1, Order.DESCENDING) // number of flights in decreasing order
-		      .setParallelism(1)
+		      //.setParallelism(1)  // merge the final result to get top 3
 		      .first(3) // pick only top 3
 		      .writeAsText(outputFilePath, WriteMode.OVERWRITE);
 		   
@@ -92,7 +93,7 @@ public class Top3CessnaModel {
 		   long endTime = System.currentTimeMillis();
 		   long timeTaken = endTime-startTime;
 		    
-		    String timeFilePath = params.get("output", PATH + "results/optimize_Top3Cessna_time.txt");
+		    String timeFilePath = params.get("output", PATH + "times/optimize_Top3Cessna_time_para10.txt");
 		    BufferedWriter out = new BufferedWriter(new FileWriter(timeFilePath));
 		    out.write("Time taken for execution was: " + timeTaken+"\n");
 		    out.close();
@@ -103,7 +104,7 @@ public class Top3CessnaModel {
 	* Count how many flights per model
 	* View step 3
 	*/
-	  @ForwardedFields("0") // // Specify that the first element is copied without any changes
+	  @ReadFields("0") //specifies what fields were used to compute a result value
 	  private static class CountFlightPerModel implements FlatMapFunction<Tuple1<String>, Tuple2<String,Integer>> {
 	    @Override
 	    public void flatMap( Tuple1<String> input_tuple, Collector<Tuple2<String,Integer>> out) {
