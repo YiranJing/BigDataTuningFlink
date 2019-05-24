@@ -90,43 +90,61 @@ public class AverageDepartureDelay {
 		/****************************
 		*	Implementation
 		*
-		* 1) Filter Processing
+		* 1) Join three data sets
+		* 2) Filter Processing
 		*    a) Filter US airlines 
 		*    b) Filter for specific year
 		*    c) Filter out cancelled flights, only keep delayed flights, and then compute delay for each flight
 		* 
-		* 2) Join three filtered data sets
 		* 3) Group by and Aggregate the result using Airline name, for number, sum, min and max delay time 
 		* 4) Compute the average time
 		* 5) Sorted Airline name in ascending order
 		****************************/
 	    
-	    DataSet<Tuple2<String, String>> USairlines = 
-				airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
+	    
+	    
+	// Step 1
+	    // output: carrier_code, flight_date, scheduled_depar, actual_departure
+		DataSet<Tuple4<String,String,String,String>> flightsCraftes = aircrafts
+			  .join(flights).where(0).equalTo(2).projectSecond(0,1,3,4);  
+		  
+		// output: flight_date, scheduled_depar, actual_departure, name, country
+	    DataSet<Tuple5<String,String,String,String,String>> join = flightsCraftes
+		      .join(airlines).where(0).equalTo(0).projectFirst(1,2,3).projectSecond(1,2);   
+	    
+	    
+	    
+	    
+	    
+	 // Step 2 a)    
+	    DataSet<Tuple5<String,String,String,String,String>> USjoinresult = 
+	    		join.filter(new FilterFunction<Tuple5<String,String,String,String,String>>() {
 				@Override
-				public boolean filter(Tuple3<String, String, String> tuple) {
+				public boolean filter(Tuple5<String,String,String,String,String> tuple) {
 					// Filter for United States
-					return tuple.f2.contains("United States"); }    
+					return tuple.f4.contains("United States"); }    
 				})
-				.project(0, 1);
+				.project(0,1,2,3,4);
 	    
 		
-	 // Step 1 b)   
-	    DataSet<Tuple4<String, String, String,String>>flightsYear = 
-	    		flights.filter(new FilterFunction<Tuple5<String, String, String, String, String>>() {
+	 // Step 2 b)    
+	    // output: scheduled_depar, actual_departure, name
+	    DataSet<Tuple3<String,String,String>> USYearjoinresult = 
+	    		USjoinresult.filter(new FilterFunction<Tuple5<String, String, String, String, String>>() {
 	    		@Override
 				public boolean filter(Tuple5<String, String, String,String, String> tuple) {
 						// Filter for given year
-					return tuple.f1.substring(0,4).equals(year); } 
-		        }).project(0,2,3,4); 
+					return tuple.f0.substring(0,4).equals(year); } 
+		        }).project(1,2,3); 
 	    
 	    
-    // Step 1 c)
-	    DataSet<Tuple3<String,String,Long>>flightsDelay =
-	    		     flightsYear.filter(new FilterFunction<Tuple4<String, String, String, String>>() {
-	                            public boolean filter(Tuple4<String, String,String,String> entry){
+    // Step 2 c)
+	    //output:  name, delay_time
+	    DataSet<Tuple2<String,Long>> joinresult =
+	    		USYearjoinresult.filter(new FilterFunction<Tuple3<String,String,String>>() {
+	                            public boolean filter(Tuple3<String,String,String> entry){
 	                            	try {
-	                            	return (format.parse(entry.f2).getTime() < format.parse(entry.f3).getTime());}  // filter only delayed flights
+	                            	return (format.parse(entry.f0).getTime() < format.parse(entry.f1).getTime());}  // filter only delayed flights
 	                            	catch(ParseException e) {
 	                            		System.out.println("Ignore the cancelled flight");
 	                            		return false;
@@ -135,13 +153,7 @@ public class AverageDepartureDelay {
 	                     }).flatMap(new TimeDifferenceMapper());
     
     
-	    
-	// Step 2
-		DataSet<Tuple2<String, Long>> flightsCraftes = aircrafts
-			  .join(flightsDelay).where(0).equalTo(1).projectSecond(0,2);  // carrier code , number of delay 	
-		    
-	    DataSet<Tuple2<String,Long>> joinresult = USairlines
-		      .join(flightsCraftes).where(0).equalTo(0).projectFirst(1).projectSecond(1); // airline name, number of delay
+
 	    
 	    
 	    
@@ -164,8 +176,7 @@ public class AverageDepartureDelay {
 	    DataSet<Tuple5<String,Integer,Long,Long,Long>> finalresult = 
 	    		joinresult_num_sum_min_max.flatMap(new AvgMapper())
 	    		.sortPartition(0,Order.ASCENDING).setParallelism(1);
-	    
-   2
+	 
 	    //write out final result
 	    finalresult.writeAsText(outputFilePath, WriteMode.OVERWRITE);   
 	    
@@ -191,13 +202,13 @@ public class AverageDepartureDelay {
 	* After get the delay time, filter out the scheduled and actual departure time columns
 	* View step 1 c)
 	*/
-	 private static class TimeDifferenceMapper implements FlatMapFunction<Tuple4<String, String, String, String>, Tuple3<String,String,Long>>{
+	 private static class TimeDifferenceMapper implements FlatMapFunction<Tuple3<String,String,String>, Tuple2<String,Long>>{
 	     SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss");
 	          @Override
-	          public void flatMap(Tuple4<String, String, String, String>input_tuple, Collector<Tuple3<String,String,Long>> out) throws ParseException { 
-	        	  Long diff_min =(long) ((format.parse(input_tuple.f3).getTime()-format.parse(input_tuple.f2).getTime())/(60.0 * 1000.0) % 60.0);
+	          public void flatMap(Tuple3<String,String,String> input_tuple, Collector<Tuple2<String,Long>> out) throws ParseException { 
+	        	  Long diff_min =(long) ((format.parse(input_tuple.f1).getTime()-format.parse(input_tuple.f0).getTime())/(60.0 * 1000.0) % 60.0);
 	        	  if (diff_min>0) {
-	        		  out.collect(new Tuple3<String,String,Long>(input_tuple.f0, input_tuple.f1, diff_min)); 
+	        		  out.collect(new Tuple2<String,Long>(input_tuple.f2, diff_min)); 
 	        	  }
 		    }
 		  }
