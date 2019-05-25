@@ -182,7 +182,7 @@ public class MostPopularAircraftTypes {
 		@Override
 		public void reduce(Iterable<Tuple2<String, String>> combinedData, Collector<Tuple3<String, String, Integer>> result) {
 			
-			HashMap<String, Integer> counter = new HashMap<String, Integer>(); // To help us construct data at the end.
+			HashMap<String, Integer> counter = new HashMap<String, Integer>(16_000_000, 1); // To help us construct data at the end.
 				
 
 			// Count how often entry appears.
