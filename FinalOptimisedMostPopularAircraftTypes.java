@@ -50,7 +50,7 @@ public class MostPopularAircraftTypes {
 		String outputFilePath = params.get("output", PATH + "results/most_popular_result_tiny.txt");
 		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/most_popular_result_tiny.txt");
 		
-		// carrier code + tail number
+		// (carrier code, tail number)
 		DataSet<Tuple2<String, String>> flights =
 		env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_flights_tiny.csv")
@@ -59,7 +59,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class);
 		
-		// carrier code + name + country
+		// (carrier code, name, country)
 		DataSet<Tuple3<String, String, String>> airlines =
 		env.readCsvFile(PATH + "ontimeperformance_airlines.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_airlines.csv")
@@ -68,7 +68,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class, String.class);
 		
-		// tail number + manufacturer + model
+		// (tail_number, manufacturer, model)
 		DataSet<Tuple3<String, String, String>> aircrafts =
 		env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_aircrafts.csv")
@@ -88,8 +88,22 @@ public class MostPopularAircraftTypes {
 		*   3) Rank grouped by aircraft types
 		****************************/
 			
-        // Step 1 carrier code + tail number + manufacturer + model (tail number)
-        // Output: carrier_code ,aircraft_type
+
+		// Step 1: Filter and retrieve and return carrier code  + name based off Country.
+        // Input: (carrier code, name, country)
+        // Output: (carrier code, name)
+        airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
+            @Override
+            public boolean filter(Tuple3<String, String, String> tuple) {
+                // Filter for user specified country.
+                return tuple.f2.contains("United States"); } 
+            })
+            .project(0, 1);
+
+
+		// Step 2: Join both datasets 
+		// Input: (carrier code, tail number) X (tail_number, manufacturer, model)
+        // Output: (carrier_code ,aircraft_type)
 		DataSet<Tuple2<String, String>> flightsOnAircrafts =
 			flights.join(aircrafts)
 			.where(1)
@@ -97,27 +111,15 @@ public class MostPopularAircraftTypes {
 			.with(new EquiJoinAirlinesCountry());
 
 
-        // Step 1: Filter and retrieve and return carrier code  + name based off Country.
-        // Input: (carrier code, name, country)
-        // Output: (carrier code, name)
-        airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
-            @Override
-            public boolean filter(Tuple3<String, String, String> tuple) {
-                // Filter for user specified country.
-                return tuple.f2.contains("United States"); }   // will change to country
-            })
-            .project(0, 1);
-
-
-		// (carrier code, name) + tail number + manufacturer + model 
-		DataSet<Tuple2<String, String>> completeData =
+		// Input: (carrier code, aircraft_type) X (carrier code, airline name)
+		// Output: (airline name, aircraft_type)
+		DataSet<Tuple2<String, String>> finalResult =
 			flightsOnAircrafts.join(airlines)
 			.where(0)
 			.equalTo(0)
 			.with(new EquiJoinFlightAircraftWithAirlines());
            
-		// Step 3
-			
+		// Step 3: Ranking
 			DataSet<Tuple3<String, String, Integer>> finalResult1 = finalResult.reduceGroup(new Rank());		
 			
 			DataSet<Tuple2<String, String>> finalResult2 = finalResult1
@@ -163,10 +165,10 @@ public class MostPopularAircraftTypes {
 	* Equi-join flights/aircrafts with airlines csv.
 	* View step 1
 	*/
-	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
+	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple2<String, String>, Tuple2<String, String>> {
 		@Override
-		public Tuple3<String, String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple3<String, String, String> airlinesData){
-			return new Tuple3<>(airlinesData.f1, flightsOnAircraftsData.f1);
+		public Tuple2<String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple2<String, String> airlinesData){
+			return new Tuple2<>(airlinesData.f1, flightsOnAircraftsData.f1);
 		}
 	}
 

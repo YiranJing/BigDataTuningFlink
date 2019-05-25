@@ -50,7 +50,7 @@ public class MostPopularAircraftTypes {
 		String outputFilePath = params.get("output", PATH + "results/most_popular_result_tiny.txt");
 		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/most_popular_result_tiny.txt");
 		
-		// carrier code + tail number
+		// (carrier code, tail number)
 		DataSet<Tuple2<String, String>> flights =
 		env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_flights_tiny.csv")
@@ -59,7 +59,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class);
 		
-		// carrier code + name + country
+		// (carrier code, name, country)
 		DataSet<Tuple3<String, String, String>> airlines =
 		env.readCsvFile(PATH + "ontimeperformance_airlines.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_airlines.csv")
@@ -68,7 +68,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class, String.class);
 		
-		// tail number + manufacturer + model
+		// (tail_number, manufacturer, model)
 		DataSet<Tuple3<String, String, String>> aircrafts =
 		env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_aircrafts.csv")
