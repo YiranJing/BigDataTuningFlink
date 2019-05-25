@@ -117,11 +117,8 @@ public class MostPopularAircraftTypes {
 		
 
 		// Step 3
-		
-			//finalResult.reduceGroup(new Test());
 			
-			DataSet<Tuple3<String, String, Integer>> finalResult1 = finalResult.reduceGroup(new Rank());
-			
+			DataSet<Tuple3<String, String, Integer>> finalResult1 = finalResult.reduceGroup(new Rank());		
 			
 			DataSet<Tuple2<String, String>> finalResult2 = finalResult1
 				.groupBy(0)
