@@ -187,10 +187,10 @@ public class MostPopularAircraftTypes {
     */
     // Input: [(name) X (tail number)] X (manufacturer, model)
     // Output: (name, manufacturer, model, count)
-	public static class Rank implements GroupReduceFunction<Tuple4<String, String, String, String>, Tuple3<String, String, Integer>> {
+	public static class Rank implements GroupReduceFunction<Tuple4<String, String, String, String>, Tuple4<String, String, String, Integer>> {
 		
 		@Override
-		public void reduce(Iterable<Tuple4<String, String, String, String>> combinedData, Collector<Tuple3<String, String, Integer>> result) {
+		public void reduce(Iterable<Tuple4<String, String, String, String>> combinedData, Collector<Tuple4<String, String, String, Integer>> result) {
             
             // For each airline, keep track of top 5 flights.
 
@@ -201,7 +201,7 @@ public class MostPopularAircraftTypes {
             String currentAirline = "";
             
 			// Count how often entry appears.
-			for(Tuple4<String, String> entry: combinedData) {
+			for(Tuple4<String, String, String, String> entry: combinedData) {
                 if (currentAirline == "")
                 {
                     // First iteration.
@@ -267,7 +267,7 @@ public class MostPopularAircraftTypes {
 			for(String key : tempResult.keySet()){
 				int count = counter.get(key);
 				String [] tuple = key.split("%"); // To help us store information.
-				result.collect(new Tuple3 <> (tuple[0], tuple[1], tuple[2], count));
+				result.collect(new Tuple4 <> (tuple[0], tuple[1], tuple[2], count));
 			}
         }
 
