@@ -159,7 +159,6 @@ public class MostPopularAircraftTypes {
 		* View step 1
 	  */
 	@ForwardedFieldsFirst("0") 
-	@ReadFieldsSecond("1;2") //specifies what fields were used to compute a result value
 	private static class EquiJoinAirlinesCountry implements JoinFunction <Tuple2<String, String>, Tuple3<String, String, String>, Tuple2<String, String>> {
 		@Override
 		public Tuple2<String, String> join(Tuple2<String, String> flightsData, Tuple3<String, String, String> aircraftsData){

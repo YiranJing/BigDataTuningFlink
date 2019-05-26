@@ -1,4 +1,4 @@
-package data_group_assignment_version2;
+package assignment;
 
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
@@ -44,13 +44,13 @@ public class MostPopularAircraftTypes {
 		scanner.close();
 		
 		// Don't forget to change file path!
-		final String PATH = "/Users/jazlynj.m.lin/assignment_data_files/";
+		final String PATH = "/Users/yiranjing/Desktop/DATA3404/assignment_data_files/";
 		//final String PATH = "hdfs://soit-hdp-pro-1.ucc.usyd.edu.au/";
 		final ParameterTool params = ParameterTool.fromArgs(args);
-		String outputFilePath = params.get("output", PATH + "results/most_popular_result_tiny.txt");
+		String outputFilePath = params.get("output", PATH + "results/bad_most_popular_result_tiny.txt");
 		//String outputFilePath = params.get("output", PATH + "user/jlin0701/assignment_data_files/results/most_popular_result_tiny.txt");
 		
-		// carrier code + tail number
+		// (carrier code, tail number)
 		DataSet<Tuple2<String, String>> flights =
 		env.readCsvFile(PATH + "ontimeperformance_flights_tiny.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_flights_tiny.csv")
@@ -59,7 +59,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class);
 		
-		// carrier code + name + country
+		// (carrier code, name, country)
 		DataSet<Tuple3<String, String, String>> airlines =
 		env.readCsvFile(PATH + "ontimeperformance_airlines.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_airlines.csv")
@@ -68,7 +68,7 @@ public class MostPopularAircraftTypes {
 						.ignoreInvalidLines()
 						.types(String.class, String.class, String.class);
 		
-		// tail number + manufacturer + model
+		// (tail_number, manufacturer, model)
 		DataSet<Tuple3<String, String, String>> aircrafts =
 		env.readCsvFile(PATH + "ontimeperformance_aircrafts.csv")
 		//env.readCsvFile(PATH + "share/data3404/assignment/ontimeperformance_aircrafts.csv")
@@ -88,36 +88,39 @@ public class MostPopularAircraftTypes {
 		*   3) Rank grouped by aircraft types
 		****************************/
 			
-		// Step 1 carrier code + tail number + manufacturer + model (tail number)
+
+		// Step 1: Filter and retrieve and return carrier code  + name based off Country.
+        // Input: (carrier code, name, country)
+        // Output: (carrier code, name)
+        airlines.filter(new FilterFunction<Tuple3<String, String, String>>() {
+            @Override
+            public boolean filter(Tuple3<String, String, String> tuple) {
+                // Filter for user specified country.
+                return tuple.f2.contains(country); } 
+            })
+            .project(0, 1);
+
+
+		// Step 2: Join both datasets 
+		// Input: (carrier code, tail number) X (tail_number, manufacturer, model)
+        // Output: (carrier_code ,aircraft_type)
 		DataSet<Tuple2<String, String>> flightsOnAircrafts =
 			flights.join(aircrafts)
 			.where(1)
 			.equalTo(0)
 			.with(new EquiJoinAirlinesCountry());
 
-		// carrier code + name + country + tail number + manufacturer + model 
-		DataSet<Tuple3<String, String, String>> completeData =
+
+		// Input: (carrier code, aircraft_type) X (carrier code, airline name)
+		// Output: (airline name, aircraft_type)
+		DataSet<Tuple2<String, String>> finalResult =
 			flightsOnAircrafts.join(airlines)
 			.where(0)
 			.equalTo(0)
-			.with(new EquiJoinFlightAircraftWithAirlines());
-       
-
-
-		// Step 2 carrier code  + name
-		DataSet<Tuple2<String, String>> finalResult = 
-			completeData.filter(new FilterFunction<Tuple3<String, String, String>>() {
-			@Override
-			public boolean filter(Tuple3<String, String, String> tuple) {
-				// Filter for United States
-				return tuple.f2.contains(country); }
-			})
-			.project(0, 1);
-       
-		
-
-		// Step 3
-			
+			.projectSecond(1).projectFirst(1);
+			//.with(new EquiJoinFlightAircraftWithAirlines());
+           
+		// Step 3: Ranking
 			DataSet<Tuple3<String, String, Integer>> finalResult1 = finalResult.reduceGroup(new Rank());		
 			
 			DataSet<Tuple2<String, String>> finalResult2 = finalResult1
@@ -159,16 +162,6 @@ public class MostPopularAircraftTypes {
 		}
 	}
 
- /**
-	* Equi-join flights/aircrafts with airlines csv.
-	* View step 1
-	*/
-	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple3<String, String, String>, Tuple3<String, String, String>> {
-		@Override
-		public Tuple3<String, String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple3<String, String, String> airlinesData){
-			return new Tuple3<>(airlinesData.f1, flightsOnAircraftsData.f1, airlinesData.f2);
-		}
-	}
 
 	/**
 	* Rank the groupings
@@ -187,8 +180,6 @@ public class MostPopularAircraftTypes {
 				String line = entry.f0 + "%" + entry.f1;
 				int count = counter.containsKey(line) ? counter.get(line) : 0;
 				counter.put(line, count + 1);
-					
-				
 			}
 			// Collect result of count.
 			for(String key : counter.keySet()){
@@ -226,3 +217,4 @@ public class MostPopularAircraftTypes {
 		}
 	}
 }
+
