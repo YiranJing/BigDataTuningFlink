@@ -5,6 +5,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase.JoinHint;
 import org.apache.flink.util.Collector;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.api.java.utils.ParameterTool;
@@ -27,6 +28,8 @@ import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ForwardedFieldsFirst;
+import org.apache.flink.api.java.functions.FunctionAnnotation.ReadFieldsSecond;
 
 public class MostPopularAircraftTypes {
 	
@@ -105,7 +108,7 @@ public class MostPopularAircraftTypes {
 		// Input: (carrier code, tail number) X (tail_number, manufacturer, model)
         // Output: (carrier_code ,aircraft_type)
 		DataSet<Tuple2<String, String>> flightsOnAircrafts =
-			flights.join(aircrafts)
+			flights.join(aircrafts,JoinHint.BROADCAST_HASH_SECOND)
 			.where(1)
 			.equalTo(0)
 			.with(new EquiJoinAirlinesCountry());
@@ -114,7 +117,7 @@ public class MostPopularAircraftTypes {
 		// Input: (carrier code, aircraft_type) X (carrier code, airline name)
 		// Output: (airline name, aircraft_type)
 		DataSet<Tuple2<String, String>> finalResult =
-			flightsOnAircrafts.join(airlines)
+			flightsOnAircrafts.join(airlines,JoinHint.BROADCAST_HASH_FIRST)
 			.where(0)
 			.equalTo(0)
 			.projectSecond(1).projectFirst(1);
@@ -155,6 +158,8 @@ public class MostPopularAircraftTypes {
 		* Equi-join flights and aircrafts csv.
 		* View step 1
 	  */
+	@ForwardedFieldsFirst("0") 
+	@ReadFieldsSecond("1;2") //specifies what fields were used to compute a result value
 	private static class EquiJoinAirlinesCountry implements JoinFunction <Tuple2<String, String>, Tuple3<String, String, String>, Tuple2<String, String>> {
 		@Override
 		public Tuple2<String, String> join(Tuple2<String, String> flightsData, Tuple3<String, String, String> aircraftsData){
@@ -162,16 +167,6 @@ public class MostPopularAircraftTypes {
 		}
 	}
 
- /**
-	* Equi-join flights/aircrafts with airlines csv.
-	* View step 1
-	*/
-	private static class EquiJoinFlightAircraftWithAirlines implements JoinFunction<Tuple2<String, String>, Tuple2<String, String>, Tuple2<String, String>> {
-		@Override
-		public Tuple2<String, String> join(Tuple2<String, String> flightsOnAircraftsData, Tuple2<String, String> airlinesData){
-			return new Tuple2<>(airlinesData.f1, flightsOnAircraftsData.f1);
-		}
-	}
 
 	/**
 	* Rank the groupings
