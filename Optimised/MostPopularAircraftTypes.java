@@ -108,7 +108,7 @@ public class MostPopularAircraftTypes {
 		// Input: (carrier code, tail number) X (tail_number, manufacturer, model)
         // Output: (carrier_code ,aircraft_type)
 		DataSet<Tuple2<String, String>> flightsOnAircrafts =
-			flights.join(aircrafts,JoinHint.BROADCAST_HASH_SECOND)
+			flights.join(aircrafts)
 			.where(1)
 			.equalTo(0)
 			.with(new EquiJoinAirlinesCountry());
@@ -117,7 +117,7 @@ public class MostPopularAircraftTypes {
 		// Input: (carrier code, aircraft_type) X (carrier code, airline name)
 		// Output: (airline name, aircraft_type)
 		DataSet<Tuple2<String, String>> finalResult =
-			flightsOnAircrafts.join(airlines,JoinHint.BROADCAST_HASH_FIRST)
+			flightsOnAircrafts.join(airlines)
 			.where(0)
 			.equalTo(0)
 			.projectSecond(1).projectFirst(1);
@@ -158,7 +158,6 @@ public class MostPopularAircraftTypes {
 		* Equi-join flights and aircrafts csv.
 		* View step 1
 	  */
-	@ForwardedFieldsFirst("0") 
 	private static class EquiJoinAirlinesCountry implements JoinFunction <Tuple2<String, String>, Tuple3<String, String, String>, Tuple2<String, String>> {
 		@Override
 		public Tuple2<String, String> join(Tuple2<String, String> flightsData, Tuple3<String, String, String> aircraftsData){
@@ -172,7 +171,6 @@ public class MostPopularAircraftTypes {
 	* View step 3
 	*/
 	public static class Rank implements GroupReduceFunction<Tuple2<String, String>, Tuple3<String, String, Integer>> {
-		
 		@Override
 		public void reduce(Iterable<Tuple2<String, String>> combinedData, Collector<Tuple3<String, String, Integer>> result) {
 			
