@@ -1,5 +1,5 @@
 # Data3404 Data Science Platforms
-System 1, 2019 
+Semester 1, 2019 
 
 ## Big Data Tuning Assignment
 - data: air trafficdata set
