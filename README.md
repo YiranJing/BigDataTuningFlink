@@ -1,5 +1,6 @@
 # Data3404 Data Science Platforms
 Semester 1, 2019 
+Optimise Queries for scalability on increasing data volumes
 
 ## Big Data Tuning Assignment
 - data: air trafficdata set
